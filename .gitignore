@@ -1,0 +1,12 @@
+# Node
+node_modules/
+build/
+dist/
+*.tsbuildinfo
+
+# Test / tooling
+coverage/
+.vitest/
+
+# 로컬 인증 캐시는 홈 디렉토리에 저장되지만, 혹시 모를 실수 방지
+session.json
