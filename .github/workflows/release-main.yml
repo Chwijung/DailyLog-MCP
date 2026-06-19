@@ -1,0 +1,56 @@
+name: Release Drafter (Version Management)
+
+on:
+  pull_request:
+    types: [closed]
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  create_release:
+    # PR이 실제로 머지됐을 때만 실행 (단순 close는 제외)
+    if: github.event.pull_request.merged == true
+    permissions:
+      contents: write # 릴리즈 발행 + package.json 동기화 커밋 push
+      pull-requests: write # release-drafter가 PR 정보 접근
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout (main)
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0 # 전체 히스토리(태그 계산용)
+
+      # 1) PR 라벨 기반으로 SemVer 버전을 정해 GitHub Release + 태그(v1.2.3) 발행
+      - name: Create and Publish Release
+        id: release_drafter
+        uses: release-drafter/release-drafter@v6
+        with:
+          config-name: release-drafter-config.yml
+          publish: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # 2) 릴리즈로 정해진 버전을 package.json에도 반영해 main에 커밋
+      #    (npm 패키지라 version 필드가 실제 릴리즈와 일치하도록 동기화)
+      - name: Sync package.json version
+        if: ${{ steps.release_drafter.outputs.resolved_version != '' }}
+        env:
+          RESOLVED_VERSION: ${{ steps.release_drafter.outputs.resolved_version }}
+        run: |
+          set -euo pipefail
+          echo "🔖 Syncing package.json to v$RESOLVED_VERSION"
+          # --no-git-tag-version: 태그는 release-drafter가 이미 만들었으므로 생성하지 않음
+          npm version "$RESOLVED_VERSION" --no-git-tag-version --allow-same-version
+          if git diff --quiet; then
+            echo "✅ package.json already at $RESOLVED_VERSION — nothing to commit."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -am "chore(release): v$RESOLVED_VERSION [skip ci]"
+          git push origin HEAD:main
+          echo "✅ Pushed package.json bump to v$RESOLVED_VERSION"
