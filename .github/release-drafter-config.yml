@@ -1,0 +1,39 @@
+name-template: "v$RESOLVED_VERSION"
+tag-template: "v$RESOLVED_VERSION"
+
+categories:
+  - title: "🎁 새로운 기능"
+    labels:
+      - "feature"
+
+  - title: "🐞 버그 수정"
+    labels:
+      - "fix"
+
+  - title: "🧼 리팩토링"
+    labels:
+      - "refactor"
+
+  - title: "🔧 설정/배포/잡일"
+    labels:
+      - "chore"
+
+change-template: "- $TITLE (#$NUMBER) @$AUTHOR"
+template: |
+  ## What's Changed
+  $CHANGES
+
+no-changes-template: "변경사항이 없어요"
+
+# PR 라벨로 SemVer(major.minor.patch) 결정. 라벨이 없으면 patch.
+version-resolver:
+  major:
+    labels:
+      - "✨ major"
+  minor:
+    labels:
+      - "✨ minor"
+  patch:
+    labels:
+      - "✨ patch"
+  default: patch
