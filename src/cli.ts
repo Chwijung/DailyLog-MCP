@@ -12,8 +12,9 @@
  * 비밀번호는 LLM 대화/MCP 로그에 남지 않으며, 토큰만 ~/.chwijung/session.json 에 캐시된다.
  */
 
-import readline from "node:readline";
+import { realpathSync } from "node:fs";
 import { resolve } from "node:path";
+import readline from "node:readline";
 import { fileURLToPath } from "node:url";
 
 import * as auth from "./auth.js";
@@ -72,7 +73,7 @@ export async function connectCommand(
   if (!trimmed) {
     io.log(
       "연결 코드가 필요합니다. 웹 'MCP 연결'에서 발급한 코드로 아래처럼 실행하세요:\n" +
-        "    node ./chwijung-mcp/build/cli.js connect <코드>",
+        "    chwijung-mcp connect <코드>",
     );
     return 1;
   }
@@ -106,7 +107,7 @@ export async function logoutCommand(io: Pick<CliIO, "log">): Promise<number> {
 export async function whoamiCommand(io: Pick<CliIO, "log">): Promise<number> {
   const session = await loadSession();
   if (!session) {
-    io.log("로그인되어 있지 않습니다. `npx chwijung-mcp login` 을 실행하세요.");
+    io.log("로그인되어 있지 않습니다. `chwijung-mcp login` 을 실행하세요.");
     return 1;
   }
   const name = session.user.full_name || session.user.email || "사용자";
@@ -189,47 +190,74 @@ const realIO: CliIO = {
   log: (msg: string) => process.stdout.write(`${msg}\n`),
 };
 
-async function main(): Promise<void> {
+/**
+ * 서브커맨드를 실행하고 종료코드를 반환한다.
+ *
+ * 주의: 여기서 `process.exit()`를 직접 호출하지 않는다. 출력을 파이프나 파일로
+ * 리다이렉트한 경우, stdout 버퍼가 비워지기 전에 프로세스가 종료되어 메시지가
+ * 잘릴 수 있다(Node에서 `process.exit()`는 대기 중인 쓰기를 기다리지 않는다).
+ * 대신 종료코드만 반환하고, 진입점에서 `process.exitCode`로 설정해 자연 종료시킨다.
+ */
+async function main(): Promise<number> {
   const cmd = process.argv[2];
   switch (cmd) {
     case undefined:
     case "serve":
       await runStdioServer();
-      return;
+      return 0;
     case "login":
-      process.exit(await loginCommand(realIO));
-      return;
+      return loginCommand(realIO);
     case "connect":
-      process.exit(await connectCommand(realIO, process.argv[3] ?? ""));
-      return;
+      return connectCommand(realIO, process.argv[3] ?? "");
     case "logout":
-      process.exit(await logoutCommand(realIO));
-      return;
+      return logoutCommand(realIO);
     case "whoami":
-      process.exit(await whoamiCommand(realIO));
-      return;
+      return whoamiCommand(realIO);
     default:
       process.stderr.write(
         `알 수 없는 명령: ${cmd}\n사용법: chwijung-mcp [serve|login|connect <코드>|logout|whoami]\n`,
       );
-      process.exit(2);
+      return 2;
   }
 }
 
-/** 이 파일이 직접 실행된 진입점인지(테스트 import가 아니라) 판별. */
+/** 경로의 심볼릭/junction 링크를 실제 경로로 해석한다. 실패하면 입력을 그대로 반환. */
+function canonicalPath(p: string): string {
+  try {
+    return realpathSync(p);
+  } catch {
+    return p;
+  }
+}
+
+/**
+ * 이 파일이 직접 실행된 진입점인지(테스트 import가 아니라) 판별.
+ *
+ * `npm link`/글로벌 설치는 junction(심볼릭 링크)으로 연결되는데, 이때 Node는
+ * `import.meta.url`은 실제 경로로, `process.argv[1]`은 링크 경로로 준다. 그대로
+ * 비교하면 어긋나 `main()`이 실행되지 않으므로, 양쪽을 realpath로 정규화해 비교한다.
+ */
 function isEntryPoint(): boolean {
   const entry = process.argv[1];
   if (!entry) return false;
   try {
-    return resolve(fileURLToPath(import.meta.url)).toLowerCase() === resolve(entry).toLowerCase();
+    const self = canonicalPath(resolve(fileURLToPath(import.meta.url)));
+    const invoked = canonicalPath(resolve(entry));
+    return self.toLowerCase() === invoked.toLowerCase();
   } catch {
     return false;
   }
 }
 
 if (!process.env.VITEST && isEntryPoint()) {
-  main().catch((err) => {
-    console.error("chwijung-mcp fatal:", err);
-    process.exit(1);
-  });
+  // process.exit()를 피하고 종료코드만 설정한다 → 이벤트 루프가 비면서
+  // 대기 중인 stdout 쓰기가 끝난 뒤 그 코드로 자연 종료된다(출력 잘림 방지).
+  main()
+    .then((code) => {
+      process.exitCode = code;
+    })
+    .catch((err) => {
+      console.error("chwijung-mcp fatal:", err);
+      process.exitCode = 1;
+    });
 }

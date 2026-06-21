@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * 취몽 MCP 서버 진입점 — stdio 트랜스포트.
- * (.mcp.json 의 `node ./chwijung-mcp/build/index.js` 가 이 파일을 직접 실행한다.)
+ * (.mcp.json 의 `node ./DailyLog-MCP/build/index.js` 가 이 파일을 직접 실행한다.)
  */
 
 import { runStdioServer } from "./serve.js";

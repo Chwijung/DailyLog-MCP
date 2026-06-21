@@ -33,25 +33,28 @@
 
 ## 🚀 빠른 시작 (3단계)
 
-### 1단계 — 설치 & 빌드 (최초 1회)
+### 1단계 — 설치 & 빌드 & 전역 등록 (최초 1회)
 
 ```bash
-cd chwijung-mcp
+cd DailyLog-MCP       # 이 README가 있는 폴더(= 패키지 루트)
 npm install
-npm run build      # build/index.js 가 생성됩니다
+npm run build         # build/cli.js · build/index.js 가 생성됩니다
+npm link              # 전역 명령 chwijung-mcp 등록 → 어느 폴더에서나 실행 가능
 ```
+
+> 💡 `npm link`는 `package.json`의 `bin`을 읽어 전역 명령 `chwijung-mcp`를 만듭니다.
+> 이후 cmd·PowerShell·Claude Code 터미널 어디서든, **어느 폴더에서든** `chwijung-mcp …`로 실행됩니다.
+> (`npm link`를 안 하면 전역 명령이 없으니, 아래 명령들이 "인식되지 않습니다" 에러를 냅니다.)
 
 ### 2단계 — 로그인 (터미널에서 1회)
 
 > 🔒 **보안을 위해 비밀번호는 AI 채팅창이 아니라, 여러분이 터미널에 직접 입력합니다.**
 
 ```bash
-npx chwijung-mcp login
-# 또는 로컬 빌드를 직접 실행:
-node ./chwijung-mcp/build/cli.js login
+chwijung-mcp login
 ```
 
-- **Claude Code 사용자**는 채팅창에 `! npx chwijung-mcp login` 을 입력하면
+- **Claude Code 사용자**는 채팅창에 `! chwijung-mcp login` 을 입력하면
   이 세션의 터미널에서 바로 실행됩니다.
 - 이메일·비밀번호를 차례로 묻고, **비밀번호는 입력 중 화면에 표시되지 않아요.**
   성공하면 토큰만 `~/.chwijung/session.json`에 저장됩니다(비밀번호는 저장 안 됨).
@@ -80,8 +83,8 @@ node ./chwijung-mcp/build/cli.js login
 상태 확인 / 로그아웃:
 
 ```bash
-node ./chwijung-mcp/build/cli.js whoami    # 현재 로그인 상태 확인
-node ./chwijung-mcp/build/cli.js logout    # 로그아웃
+chwijung-mcp whoami    # 현재 로그인 상태 확인
+chwijung-mcp logout    # 로그아웃
 ```
 
 > 🛡️ 토큰 파일(`~/.chwijung/session.json`)은 평문입니다. POSIX는 `0600`, Windows는 `icacls`로
@@ -131,7 +134,7 @@ node ./chwijung-mcp/build/cli.js logout    # 로그아웃
 
 | 증상 | 원인 / 해결 |
 |------|-------------|
-| "로그인이 필요합니다" | 터미널에서 `npx chwijung-mcp login` (또는 `node ./chwijung-mcp/build/cli.js login`) 실행 |
+| "로그인이 필요합니다" | 터미널에서 `chwijung-mcp login` 실행 (최초 1회 `npm link` 필요) |
 | "세션이 만료되었습니다" | refresh 토큰 체인이 끊김(폐기) → 터미널에서 다시 `login` |
 | "학생(student) 계정만 …" | 코치/멘토/운영자 계정으로는 등록 불가. 로그인 단계에서 비-학생은 세션 저장이 거부됨 |
 | "…필수입니다 / N자 이하" | 필수 필드 누락·길이 초과. AI가 내용을 채워 다시 호출하게 두면 됨 |
@@ -157,7 +160,7 @@ node ./chwijung-mcp/build/cli.js logout    # 로그아웃
   "mcpServers": {
     "chwijung": {
       "command": "node",
-      "args": ["./chwijung-mcp/build/index.js"],
+      "args": ["./DailyLog-MCP/build/index.js"],
       "env": { "CHWIJUNG_API_BASE_URL": "${CHWIJUNG_API_BASE_URL:-http://localhost:8000}" }
     }
   }
@@ -169,7 +172,7 @@ node ./chwijung-mcp/build/cli.js logout    # 로그아웃
 ```toml
 [mcp_servers.chwijung]
 command = "node"
-args = ["C:/Users/<당신>/.../Chwijung/chwijung-mcp/build/index.js"]
+args = ["C:/Users/<당신>/.../Chwijung/DailyLog-MCP/build/index.js"]
 env = { CHWIJUNG_API_BASE_URL = "https://<백엔드-주소>" }
 ```
 
@@ -180,7 +183,7 @@ env = { CHWIJUNG_API_BASE_URL = "https://<백엔드-주소>" }
   "mcpServers": {
     "chwijung": {
       "command": "node",
-      "args": ["./chwijung-mcp/build/index.js"],
+      "args": ["./DailyLog-MCP/build/index.js"],
       "env": { "CHWIJUNG_API_BASE_URL": "http://localhost:8000" }
     }
   }
@@ -190,7 +193,7 @@ env = { CHWIJUNG_API_BASE_URL = "https://<백엔드-주소>" }
 ### 이 패키지 자체 개발
 
 ```bash
-cd chwijung-mcp
+cd DailyLog-MCP
 npm install
 npm test           # Vitest (단위 + 인메모리 MCP 통합)
 npm run build      # tsc → build/

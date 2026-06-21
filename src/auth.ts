@@ -110,13 +110,13 @@ export async function connectAndStore(
 /** 유효한 access_token을 가진 세션을 반환. 만료 시 갱신, 불가하면 NotLoggedInError. */
 export async function getActiveSession(client: ChwijungClient): Promise<SessionData> {
   const session = await loadSession();
-  if (!session) throw new NotLoggedInError("로그인이 필요합니다. 터미널에서 `npx chwijung-mcp login`을 실행하세요.");
+  if (!session) throw new NotLoggedInError("로그인이 필요합니다. 터미널에서 `chwijung-mcp login`을 실행하세요.");
 
   if (isAccessValid(session)) return session;
 
   if (!session.refresh_token) {
     await clearSession();
-    throw new NotLoggedInError("세션이 만료되었습니다. 터미널에서 `npx chwijung-mcp login`으로 다시 로그인하세요.");
+    throw new NotLoggedInError("세션이 만료되었습니다. 터미널에서 `chwijung-mcp login`으로 다시 로그인하세요.");
   }
 
   let data: Record<string, any>;
@@ -125,7 +125,7 @@ export async function getActiveSession(client: ChwijungClient): Promise<SessionD
   } catch (err) {
     if (err instanceof AuthError) {
       await clearSession();
-      throw new NotLoggedInError("세션이 만료되었습니다. 터미널에서 `npx chwijung-mcp login`으로 다시 로그인하세요.");
+      throw new NotLoggedInError("세션이 만료되었습니다. 터미널에서 `chwijung-mcp login`으로 다시 로그인하세요.");
     }
     throw err;
   }
@@ -145,7 +145,7 @@ export async function submitDailyLog(
     throw new NotStudentError("학생(student) 계정만 데일리 로그를 작성할 수 있습니다.");
   }
   if (!session.cohort_id) {
-    throw new NotLoggedInError("코호트 정보가 없습니다. 터미널에서 `npx chwijung-mcp login`으로 다시 로그인하세요.");
+    throw new NotLoggedInError("코호트 정보가 없습니다. 터미널에서 `chwijung-mcp login`으로 다시 로그인하세요.");
   }
 
   try {
@@ -160,7 +160,7 @@ export async function submitDailyLog(
     }
     if (err instanceof AuthError) {
       await clearSession();
-      throw new NotLoggedInError("세션이 만료되었습니다. 터미널에서 `npx chwijung-mcp login`으로 다시 로그인하세요.");
+      throw new NotLoggedInError("세션이 만료되었습니다. 터미널에서 `chwijung-mcp login`으로 다시 로그인하세요.");
     }
     throw err;
   }
