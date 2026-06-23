@@ -108,14 +108,13 @@ export function registerTools(server: McpServer): void {
           "로그인 방법은 두 가지입니다(둘 다 학생 계정만, 최초 1회면 됩니다).\n\n" +
           "[방법 1] 웹에서 연결 코드 발급 (권장, 터미널 비밀번호 입력 불필요)\n" +
           "  웹에 로그인한 뒤 'MCP 연결'에서 코드를 발급받아 터미널에서 실행:\n" +
-          "    node ./chwijung-mcp/build/cli.js connect <코드>\n\n" +
+          "    npx chwijung-mcp connect <코드>\n\n" +
           "[방법 2] 터미널 로그인\n" +
           "  보안상 비밀번호는 AI 채팅에 입력하지 말고, 사용자가 직접 터미널에서 실행:\n" +
           "    npx chwijung-mcp login\n" +
-          "  (레포에 빌드돼 있으면 `node ./chwijung-mcp/build/cli.js login` 도 가능)\n" +
           "  이메일/비밀번호를 묻고, 비밀번호는 입력 중 화면에 표시되지 않습니다.\n\n" +
           "토큰만 로컬(~/.chwijung/session.json)에 캐시되며 이후 자동 회전되어 재로그인이 거의 필요 없습니다.\n" +
-          "Claude Code 사용자는 채팅창에 `! node ./chwijung-mcp/build/cli.js connect <코드>` 처럼 입력하면 이 세션에서 바로 실행됩니다.",
+          "Claude Code 사용자는 채팅창에 `! npx chwijung-mcp connect <코드>` 처럼 입력하면 이 세션에서 바로 실행됩니다.",
       );
     },
   );
