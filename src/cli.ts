@@ -13,6 +13,7 @@
  */
 
 import { realpathSync } from "node:fs";
+import readline from "node:readline";
 import { resolve } from "node:path";
 import readline from "node:readline";
 import { fileURLToPath } from "node:url";
@@ -73,7 +74,7 @@ export async function connectCommand(
   if (!trimmed) {
     io.log(
       "연결 코드가 필요합니다. 웹 'MCP 연결'에서 발급한 코드로 아래처럼 실행하세요:\n" +
-        "    chwijung-mcp connect <코드>",
+        "    npx chwijung-mcp connect <코드>",
     );
     return 1;
   }
@@ -232,18 +233,22 @@ function canonicalPath(p: string): string {
 
 /**
  * 이 파일이 직접 실행된 진입점인지(테스트 import가 아니라) 판별.
- *
- * `npm link`/글로벌 설치는 junction(심볼릭 링크)으로 연결되는데, 이때 Node는
- * `import.meta.url`은 실제 경로로, `process.argv[1]`은 링크 경로로 준다. 그대로
- * 비교하면 어긋나 `main()`이 실행되지 않으므로, 양쪽을 realpath로 정규화해 비교한다.
+ * 전역 설치(`npm install -g .` / `npm link`)는 글로벌 node_modules를 소스 폴더로 가리키는
+ * symlink/junction을 만든다. 이때 `process.argv[1]`은 symlink 경로, `import.meta.url`은
+ * 실제 경로로 해석돼 단순 비교가 어긋난다 → 양쪽 모두 realpath로 풀어 비교한다.
  */
 function isEntryPoint(): boolean {
   const entry = process.argv[1];
   if (!entry) return false;
+  const canonical = (p: string): string => {
+    try {
+      return realpathSync(p).toLowerCase();
+    } catch {
+      return resolve(p).toLowerCase();
+    }
+  };
   try {
-    const self = canonicalPath(resolve(fileURLToPath(import.meta.url)));
-    const invoked = canonicalPath(resolve(entry));
-    return self.toLowerCase() === invoked.toLowerCase();
+    return canonical(fileURLToPath(import.meta.url)) === canonical(entry);
   } catch {
     return false;
   }

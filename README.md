@@ -5,6 +5,7 @@
 >
 > 이제 데일리 로그 화면에서 직접 타이핑하지 않아도 돼요. ✨
 
+
 ---
 
 ## 🤔 이게 뭐예요? (한눈에)
@@ -33,25 +34,46 @@
 
 ## 🚀 빠른 시작 (3단계)
 
-### 1단계 — 설치 & 빌드 & 전역 등록 (최초 1회)
+### 1단계 — 설치 & 전역 등록 (최초 1회)
+
+> 📌 **클론 위치·폴더명은 무관합니다.** 아래는 한 번만 하면 되고, 이후 어떤 프로젝트에서든
+> `npx chwijung-mcp …` 로 쓸 수 있어요. (npm 배포 없이 로컬 소스를 전역 설치하는 방식)
 
 ```bash
-cd DailyLog-MCP       # 이 README가 있는 폴더(= 패키지 루트)
+git clone <…>/DailyLog-MCP.git   # 폴더명은 무엇이든 OK
+cd DailyLog-MCP                   # 클론한 폴더로 이동
 npm install
-npm run build         # build/cli.js · build/index.js 가 생성됩니다
-npm link              # 전역 명령 chwijung-mcp 등록 → 어느 폴더에서나 실행 가능
+npm run build                    # build/ 가 생성됩니다
+npm install -g .                 # 전역 bin 'chwijung-mcp' 등록 (publish 불필요)
 ```
 
-> 💡 `npm link`는 `package.json`의 `bin`을 읽어 전역 명령 `chwijung-mcp`를 만듭니다.
-> 이후 cmd·PowerShell·Claude Code 터미널 어디서든, **어느 폴더에서든** `chwijung-mcp …`로 실행됩니다.
-> (`npm link`를 안 하면 전역 명령이 없으니, 아래 명령들이 "인식되지 않습니다" 에러를 냅니다.)
+이제 `npx chwijung-mcp whoami` 가 **아무 폴더에서나** 동작하면 성공입니다.
 
-### 2단계 — 로그인 (터미널에서 1회)
+### 2단계 — 연결 (최초 1회)
+
+두 가지 방법이 있어요. **웹에서 연결 코드를 발급받는 [방법 1]이 더 간편하고 안전합니다**
+(비밀번호를 어디에도 입력하지 않아요). 터미널에서 직접 로그인하려면 [방법 2]를 쓰세요.
+
+#### [방법 1] 웹에서 연결 코드로 연결 (권장)
+
+1. 취몽 웹에 로그인한 뒤, 데일리 로그 화면에서 **`MCP 연결`** 을 엽니다.
+2. **`연결 코드 생성`** 을 누르면 일회용 코드가 나와요 (약 5분간 유효 · 1회용).
+3. 화면에 표시된 명령을 그대로 터미널에 붙여넣어 실행합니다:
+
+```bash
+npx chwijung-mcp connect <코드>
+```
+
+- **Claude Code 사용자**는 채팅창에 `! npx chwijung-mcp connect <코드>` 를 입력하면
+  이 세션의 터미널에서 바로 실행됩니다.
+- **비밀번호를 입력하지 않아도 돼요.** 성공하면 토큰만 `~/.chwijung/session.json`에 저장됩니다.
+
+#### [방법 2] 터미널에서 직접 로그인
 
 > 🔒 **보안을 위해 비밀번호는 AI 채팅창이 아니라, 여러분이 터미널에 직접 입력합니다.**
 
 ```bash
-chwijung-mcp login
+npx chwijung-mcp login
 ```
 
 - **Claude Code 사용자**는 채팅창에 `! chwijung-mcp login` 을 입력하면
@@ -83,8 +105,8 @@ chwijung-mcp login
 상태 확인 / 로그아웃:
 
 ```bash
-chwijung-mcp whoami    # 현재 로그인 상태 확인
-chwijung-mcp logout    # 로그아웃
+npx chwijung-mcp whoami    # 현재 로그인 상태 확인
+npx chwijung-mcp logout    # 로그아웃
 ```
 
 > 🛡️ 토큰 파일(`~/.chwijung/session.json`)은 평문입니다. POSIX는 `0600`, Windows는 `icacls`로
@@ -134,11 +156,12 @@ chwijung-mcp logout    # 로그아웃
 
 | 증상 | 원인 / 해결 |
 |------|-------------|
-| "로그인이 필요합니다" | 터미널에서 `chwijung-mcp login` 실행 (최초 1회 `npm link` 필요) |
+| "로그인이 필요합니다" | 터미널에서 `npx chwijung-mcp login` 실행 |
 | "세션이 만료되었습니다" | refresh 토큰 체인이 끊김(폐기) → 터미널에서 다시 `login` |
 | "학생(student) 계정만 …" | 코치/멘토/운영자 계정으로는 등록 불가. 로그인 단계에서 비-학생은 세션 저장이 거부됨 |
 | "…필수입니다 / N자 이하" | 필수 필드 누락·길이 초과. AI가 내용을 채워 다시 호출하게 두면 됨 |
-| MCP 서버가 안 뜸 | `npm run build` 했는지, `node -v` ≥18, `build/index.js`(또는 `build/cli.js`) 경로, `CHWIJUNG_API_BASE_URL` 확인 |
+| `npx chwijung-mcp` 가 안 됨 | 1단계의 `npm run build` + `npm install -g .` 를 했는지, `node -v` ≥18 확인 |
+| MCP 서버가 안 뜸 | 전역 설치(`npm install -g .`) 여부, `node -v` ≥18, `CHWIJUNG_API_BASE_URL` 확인 |
 
 ---
 ---
@@ -152,6 +175,9 @@ chwijung-mcp logout    # 로그아웃
 백엔드 주소는 환경변수 `CHWIJUNG_API_BASE_URL`로 주입합니다(배포 주소, 로컬은 `http://localhost:8000`).
 **비밀번호·토큰은 설정 파일에 넣지 않습니다.** 인증은 터미널 `login` 1회로 끝납니다.
 
+> 전제: 1단계의 **전역 설치(`npm install -g .`)** 가 끝나 있어야 합니다. 그러면 아래 설정들은
+> **프로젝트 루트에 MCP 폴더를 두지 않고도** 전역 bin `chwijung-mcp` 를 호출합니다.
+
 **Claude Code** — 레포 루트 `.mcp.json`에 이미 포함되어 있어 자동 인식됩니다.
 
 ```jsonc
@@ -159,20 +185,20 @@ chwijung-mcp logout    # 로그아웃
 {
   "mcpServers": {
     "chwijung": {
-      "command": "node",
-      "args": ["./DailyLog-MCP/build/index.js"],
+      "command": "npx",
+      "args": ["-y", "chwijung-mcp"],
       "env": { "CHWIJUNG_API_BASE_URL": "${CHWIJUNG_API_BASE_URL:-http://localhost:8000}" }
     }
   }
 }
 ```
 
-**Codex CLI** — `~/.codex/config.toml`에 추가 (경로는 절대경로 권장):
+**Codex CLI** — `~/.codex/config.toml`에 추가:
 
 ```toml
 [mcp_servers.chwijung]
-command = "node"
-args = ["C:/Users/<당신>/.../Chwijung/DailyLog-MCP/build/index.js"]
+command = "npx"
+args = ["-y", "chwijung-mcp"]
 env = { CHWIJUNG_API_BASE_URL = "https://<백엔드-주소>" }
 ```
 
@@ -182,21 +208,25 @@ env = { CHWIJUNG_API_BASE_URL = "https://<백엔드-주소>" }
 {
   "mcpServers": {
     "chwijung": {
-      "command": "node",
-      "args": ["./DailyLog-MCP/build/index.js"],
+      "command": "npx",
+      "args": ["-y", "chwijung-mcp"],
       "env": { "CHWIJUNG_API_BASE_URL": "http://localhost:8000" }
     }
   }
 }
 ```
 
+> 🪟 Windows에서 호스트가 `npx` 로 전역 bin을 못 잡으면 `"command": "chwijung-mcp"` 로 바꾸거나,
+> `node "<npm root -g>/chwijung-mcp/build/index.js"` 절대경로를 사용하세요.
+
 ### 이 패키지 자체 개발
 
 ```bash
-cd DailyLog-MCP
+cd DailyLog-MCP    # 클론한 폴더
 npm install
 npm test           # Vitest (단위 + 인메모리 MCP 통합)
 npm run build      # tsc → build/
+npm install -g .   # 변경분을 전역 bin에 반영(재설치)
 ```
 
 구조 (`src/`):
@@ -205,14 +235,17 @@ npm run build      # tsc → build/
 - `client.ts` — 백엔드 `/api/v2` 호출(login/refresh/submit). `fetchFn` 주입으로 모킹
 - `auth.ts` — 로그인 저장 + 만료 시 **회전 갱신**(refresh 토큰 회전 저장) + 학생 게이트
 - `server.ts` — MCP 도구(`login`=터미널 안내, `submit_daily_log`, `whoami`) + 입력 검증
-- `cli.ts` — 터미널 진입점(서브커맨드 `login`/`logout`/`whoami`, 인자 없으면 서버 실행). 비밀번호 에코 숨김
+- `cli.ts` — 터미널 진입점(서브커맨드 `login`/`connect <코드>`/`logout`/`whoami`, 인자 없으면 서버 실행). 비밀번호 에코 숨김
 - `serve.ts` — MCP stdio 서버 실행(공유)
 - `index.ts` — stdio 진입점(`.mcp.json`이 직접 실행)
 
-### (선택) npx 무설치 배포
+### 배포 방식 (비공개 · 전역 설치)
 
-npm에 publish 하면 빌드·설치 단계 없이 배포할 수 있습니다:
+npm publish 없이 **로컬 소스를 전역 설치**해서 씁니다(사내 수업용, 비공개). 1단계 참고:
 
-```json
-"chwijung": { "command": "npx", "args": ["-y", "chwijung-mcp"], "env": { "CHWIJUNG_API_BASE_URL": "https://<백엔드-주소>" } }
+```bash
+npm install && npm run build && npm install -g .   # bin 'chwijung-mcp' 전역 등록
 ```
+
+이후 모든 도구 설정에서 `npx chwijung-mcp` (또는 `chwijung-mcp`)로 호출하면 됩니다.
+나중에 공개 배포가 가능해지면 동일한 `npx -y chwijung-mcp` 설정이 그대로 동작합니다.

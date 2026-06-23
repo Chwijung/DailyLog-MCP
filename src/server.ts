@@ -109,13 +109,13 @@ export function registerTools(server: McpServer): void {
           "아래 전역 명령 `chwijung-mcp`는 패키지 폴더에서 한 번 `npm link`(또는 전역 설치)하면 어느 폴더에서나 됩니다.\n\n" +
           "[방법 1] 웹에서 연결 코드 발급 (권장, 터미널 비밀번호 입력 불필요)\n" +
           "  웹에 로그인한 뒤 'MCP 연결'에서 코드를 발급받아 터미널에서 실행:\n" +
-          "    chwijung-mcp connect <코드>\n\n" +
+          "    npx chwijung-mcp connect <코드>\n\n" +
           "[방법 2] 터미널 로그인\n" +
           "  보안상 비밀번호는 AI 채팅에 입력하지 말고, 사용자가 직접 터미널에서 실행:\n" +
-          "    chwijung-mcp login\n" +
+          "    npx chwijung-mcp login\n" +
           "  이메일/비밀번호를 묻고, 비밀번호는 입력 중 화면에 표시되지 않습니다.\n\n" +
           "토큰만 로컬(~/.chwijung/session.json)에 캐시되며 이후 자동 회전되어 재로그인이 거의 필요 없습니다.\n" +
-          "Claude Code 사용자는 채팅창에 `! chwijung-mcp connect <코드>` 처럼 입력하면 이 세션에서 바로 실행됩니다.",
+          "Claude Code 사용자는 채팅창에 `! npx chwijung-mcp connect <코드>` 처럼 입력하면 이 세션에서 바로 실행됩니다.",
       );
     },
   );
