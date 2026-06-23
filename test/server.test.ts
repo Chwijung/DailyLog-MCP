@@ -87,7 +87,7 @@ describe("도구 — 인메모리 MCP 디스패치", () => {
     // 비밀번호/이메일 인자를 더 이상 받지 않는다(LLM 노출 방지)
     expect(Object.keys(login?.inputSchema?.properties ?? {})).toHaveLength(0);
     const res = (await client.callTool({ name: "login", arguments: {} })) as any;
-    expect(res.content[0].text).toContain("npx chwijung-mcp login");
+    expect(res.content[0].text).toContain("chwijung-mcp login");
   });
 
   it("submit_daily_log — 검증 실패 메시지(네트워크 없음)", async () => {

@@ -76,7 +76,7 @@ npx chwijung-mcp connect <코드>
 npx chwijung-mcp login
 ```
 
-- **Claude Code 사용자**는 채팅창에 `! npx chwijung-mcp login` 을 입력하면
+- **Claude Code 사용자**는 채팅창에 `! chwijung-mcp login` 을 입력하면
   이 세션의 터미널에서 바로 실행됩니다.
 - 이메일·비밀번호를 차례로 묻고, **비밀번호는 입력 중 화면에 표시되지 않아요.**
   성공하면 토큰만 `~/.chwijung/session.json`에 저장됩니다(비밀번호는 저장 안 됨).

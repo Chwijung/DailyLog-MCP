@@ -105,7 +105,8 @@ export function registerTools(server: McpServer): void {
         : "현재 로그인되어 있지 않습니다.";
       return text(
         `${status}\n` +
-          "로그인 방법은 두 가지입니다(둘 다 학생 계정만, 최초 1회면 됩니다).\n\n" +
+          "로그인 방법은 두 가지입니다(둘 다 학생 계정만, 최초 1회면 됩니다). " +
+          "아래 전역 명령 `chwijung-mcp`는 패키지 폴더에서 한 번 `npm link`(또는 전역 설치)하면 어느 폴더에서나 됩니다.\n\n" +
           "[방법 1] 웹에서 연결 코드 발급 (권장, 터미널 비밀번호 입력 불필요)\n" +
           "  웹에 로그인한 뒤 'MCP 연결'에서 코드를 발급받아 터미널에서 실행:\n" +
           "    npx chwijung-mcp connect <코드>\n\n" +
@@ -243,7 +244,7 @@ export function registerTools(server: McpServer): void {
       const session = await loadSession();
       if (!session)
         return text(
-          "로그인되어 있지 않습니다. 터미널에서 `npx chwijung-mcp login` 을 실행하세요 (login 도구로 안내를 받을 수 있습니다).",
+          "로그인되어 있지 않습니다. 터미널에서 `chwijung-mcp login` 을 실행하세요 (login 도구로 안내를 받을 수 있습니다).",
         );
       const name = session.user.full_name || session.user.email || "사용자";
       const tokenState = isAccessValid(session)
