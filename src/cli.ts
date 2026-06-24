@@ -15,7 +15,6 @@
 import { realpathSync } from "node:fs";
 import readline from "node:readline";
 import { resolve } from "node:path";
-import readline from "node:readline";
 import { fileURLToPath } from "node:url";
 
 import * as auth from "./auth.js";
