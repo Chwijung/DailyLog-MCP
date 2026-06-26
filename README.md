@@ -67,7 +67,12 @@ npm install -g .                 # 전역 명령어 'chwijung-mcp' 등록
 }
 ```
 
+> 터미널에서 한 줄로 끝내려면: `claude mcp add chwijung -- npx -y chwijung-mcp`
+
 **Cursor** — `.cursor/mcp.json` 에 위와 동일한 내용을 추가합니다.
+
+**Antigravity** — `~/.gemini/config/mcp_config.json` 에 위와 동일한 `mcpServers` JSON을 추가합니다.
+(IDE에서는 설정 → Customizations → Open MCP Config 로 같은 파일을 열 수 있어요.)
 
 **Codex CLI** — `~/.codex/config.toml` 에:
 
@@ -76,6 +81,8 @@ npm install -g .                 # 전역 명령어 'chwijung-mcp' 등록
 command = "npx"
 args = ["-y", "chwijung-mcp"]
 ```
+
+> 터미널에서 한 줄로 끝내려면: `codex mcp add chwijung -- npx -y chwijung-mcp`
 
 > 등록되면 `/mcp` 로 연결 상태를 확인할 수 있어요. 처음 한 번 MCP 서버 사용 승인
 > 프롬프트에만 동의하면 끝!
