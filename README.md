@@ -51,8 +51,7 @@ npm install -g .                 # 전역 명령어 'chwijung-mcp' 등록
 
 ### 2단계 — 내 AI 도구에 등록 (최초 1회)
 
-쓰는 도구의 MCP 설정에 아래 항목을 추가하세요. **백엔드 주소는 자동으로 잡히니
-따로 설정할 게 없어요.**
+쓰는 도구의 MCP 설정에 아래 항목을 추가하세요.
 
 **Claude Code** — 작업하는 프로젝트의 `.mcp.json` (또는 터미널 `claude mcp add`)에:
 
@@ -102,8 +101,6 @@ args = ["-y", "chwijung-mcp"]
 npx chwijung-mcp connect <코드>
 ```
 
-- **Claude Code 사용자**는 채팅창에 `! npx chwijung-mcp connect <코드>` 를 입력하면
-  이 세션의 터미널에서 바로 실행됩니다.
 - **비밀번호를 입력하지 않아도 돼요.** 성공하면 토큰만 `~/.chwijung/session.json`에 저장됩니다.
 
 #### [방법 2] 터미널에서 직접 로그인
