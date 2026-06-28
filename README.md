@@ -23,6 +23,14 @@
 
 ---
 
+## 🎬 데모 영상
+
+> MCP 연결부터 데일리 로그 자동 등록까지 한 번에 보기
+
+https://github.com/user-attachments/assets/7a7c0dd9-b40d-46a4-9757-aa12af491c2f
+
+---
+
 ## ✅ 시작 전 준비물
 
 | 필요한 것 | 확인 방법 |
