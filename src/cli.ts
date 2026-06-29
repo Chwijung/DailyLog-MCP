@@ -47,10 +47,7 @@ export async function loginCommand(
   try {
     const session = await auth.loginAndStore(client, email, password);
     const name = session.user.full_name || session.user.email || "사용자";
-    io.log(
-      `로그인 성공: ${name}님 (cohort: ${session.cohort_id}). ` +
-        "이제 개발 세션을 마칠 때 submit_daily_log 로 데일리 로그가 자동 등록됩니다.",
-    );
+    io.log(`로그인 완료: ${name}님`);
     return 0;
   } catch (err) {
     if (err instanceof auth.NotStudentError) {
@@ -80,10 +77,7 @@ export async function connectCommand(
   try {
     const session = await auth.connectAndStore(client, trimmed);
     const name = session.user.full_name || session.user.email || "사용자";
-    io.log(
-      `연결 성공: ${name}님 (cohort: ${session.cohort_id}). ` +
-        "이제 개발 세션을 마칠 때 submit_daily_log 로 데일리 로그가 자동 등록됩니다.",
-    );
+    io.log(`연결 완료: ${name}님`);
     return 0;
   } catch (err) {
     if (err instanceof auth.NotStudentError) {
@@ -114,9 +108,7 @@ export async function whoamiCommand(io: Pick<CliIO, "log">): Promise<number> {
   const tokenState = isAccessValid(session)
     ? "유효"
     : "만료(다음 호출 시 자동 갱신 또는 재로그인 필요)";
-  io.log(
-    `로그인됨: ${name} (역할: ${session.user.role}, cohort: ${session.cohort_id}, 토큰: ${tokenState})`,
-  );
+  io.log(`로그인됨: ${name} (토큰: ${tokenState})`);
   return 0;
 }
 
