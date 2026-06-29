@@ -19,7 +19,7 @@ import { homedir } from "node:os";
 import { dirname, join, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { clearSession, sessionFile } from "./session.js";
+import { clearSession } from "./session.js";
 
 /** npm 전역 패키지명 / MCP 서버 등록 이름 */
 const PKG = "chwijung-mcp";
@@ -143,11 +143,13 @@ export async function uninstall(opts: UninstallOptions = {}): Promise<void> {
       `   ※ Codex CLI가 없으면 ~/.codex/config.toml 의 [mcp_servers.${SERVER}] 블록을 직접 삭제하세요.\n`,
   );
 
-  // 2) 토큰 캐시(~/.chwijung) 제거
+  // 2) 토큰 캐시(~/.chwijung) 제거 — 문서상 고정 경로만 삭제한다.
+  //    CHWIJUNG_SESSION_FILE override(테스트용)가 가리키는 부모 디렉터리를 통째로
+  //    지우지 않도록, dirname(sessionFile()) 대신 join(home, ".chwijung")로 고정한다.
   log("2) 토큰 캐시 삭제");
   try {
-    await clearSession();
-    const dir = dirname(sessionFile());
+    await clearSession(); // override 경로를 포함해 세션 파일 자체를 먼저 unlink
+    const dir = join(home, ".chwijung");
     await fs.rm(dir, { recursive: true, force: true });
     log(`   - ${dir} 삭제 완료\n`);
   } catch (err) {

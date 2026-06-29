@@ -125,4 +125,31 @@ describe("uninstall", () => {
 
     expect(existsSync(repoRoot)).toBe(false); // npm 실패에도 레포 폴더는 삭제됨
   });
+
+  it("CHWIJUNG_SESSION_FILE override가 .chwijung 밖을 가리켜도 그 부모를 삭제하지 않음", async () => {
+    // override를 .chwijung이 아닌 'elsewhere' 아래로 둔다. 과거엔 dirname(sessionFile())로
+    // 이 부모(elsewhere)가 통째로 지워졌다 — 이제 join(home, ".chwijung")만 삭제 대상.
+    const elsewhere = join(dir, "elsewhere");
+    mkdirSync(elsewhere, { recursive: true });
+    const sentinel = join(elsewhere, "keep.txt");
+    writeFileSync(sentinel, "keep", "utf-8");
+    process.env.CHWIJUNG_SESSION_FILE = join(elsewhere, "session.json");
+
+    const repoRoot = join(dir, "repo");
+    mkdirSync(repoRoot, { recursive: true });
+    const cwd = join(dir, "outside");
+    mkdirSync(cwd, { recursive: true });
+
+    await uninstall({
+      run: () => {},
+      repoRoot,
+      cwd,
+      home: dir,
+      jsonConfigPaths: [],
+      log: () => {},
+    });
+
+    expect(existsSync(elsewhere)).toBe(true); // override의 부모는 삭제되지 않음
+    expect(existsSync(sentinel)).toBe(true); // 그 안의 파일도 그대로 남음
+  });
 });

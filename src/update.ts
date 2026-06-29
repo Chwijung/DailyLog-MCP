@@ -13,6 +13,7 @@
 import { execSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { createRequire } from "node:module";
+import { constants } from "node:os";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -61,6 +62,22 @@ async function fetchLatest(): Promise<string | null> {
   } catch {
     return null;
   }
+}
+
+/**
+ * execFileSync 실패(err)를 전파할 종료코드로 변환한다(status > signal > 1 순).
+ * signal 종료(SIGINT/SIGTERM 등)는 status=null·signal=시그널명으로 오므로
+ * 관례적인 128+n 으로 매핑해, 정상적인 시그널 종료가 1(실패)로 납작해지지 않게 한다.
+ * (테스트 위해 export.)
+ */
+export function exitCodeFromExecError(err: unknown): number {
+  const { status, signal } = (err ?? {}) as {
+    status?: number | null;
+    signal?: NodeJS.Signals | null;
+  };
+  if (typeof status === "number") return status;
+  const signum = signal ? constants.signals[signal] : undefined;
+  return signum != null ? 128 + signum : 1; // SIGINT→130, SIGTERM→143
 }
 
 /**
@@ -136,9 +153,8 @@ export async function checkAndUpdate(): Promise<void> {
     });
     process.exit(0);
   } catch (err) {
-    // 재실행 대상이 비정상 종료/시작 실패하면 그 종료코드를 그대로 전파한다.
-    // (finally 로 무조건 exit(0) 하면 실패를 성공으로 가려버린다.)
-    const status = (err as { status?: number | null }).status;
-    process.exit(typeof status === "number" ? status : 1);
+    // 재실행 대상의 종료를 그대로 전파한다(무조건 exit(0)이면 실패/시그널 종료를 숨긴다).
+    // status가 숫자면 그 코드, signal 종료는 관례적 128+n 으로 변환한다.
+    process.exit(exitCodeFromExecError(err));
   }
 }
