@@ -22,6 +22,7 @@ import { BackendError, ChwijungClient } from "./client.js";
 import { getBaseUrl } from "./config.js";
 import { clearSession, isAccessValid, loadSession } from "./session.js";
 import { runStdioServer } from "./serve.js";
+import { checkAndUpdate } from "./update.js";
 
 export interface CliIO {
   readEmail: () => Promise<string>;
@@ -192,6 +193,9 @@ const realIO: CliIO = {
  */
 async function main(): Promise<number> {
   const cmd = process.argv[2];
+  if (cmd !== undefined && cmd !== "serve") {
+    await checkAndUpdate();
+  }
   switch (cmd) {
     case undefined:
     case "serve":
