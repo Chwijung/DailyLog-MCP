@@ -100,23 +100,9 @@ export function registerTools(server: McpServer): void {
     },
     async () => {
       const loggedIn = (await loadSession()) != null;
-      const status = loggedIn
-        ? "현재 로그인되어 있습니다."
-        : "현재 로그인되어 있지 않습니다.";
-      return text(
-        `${status}\n` +
-          "로그인 방법은 두 가지입니다(둘 다 학생 계정만, 최초 1회면 됩니다). " +
-          "아래 전역 명령 `chwijung-mcp`는 패키지 폴더에서 한 번 `npm link`(또는 전역 설치)하면 어느 폴더에서나 됩니다.\n\n" +
-          "[방법 1] 웹에서 연결 코드 발급 (권장, 터미널 비밀번호 입력 불필요)\n" +
-          "  웹에 로그인한 뒤 'MCP 연결'에서 코드를 발급받아 터미널에서 실행:\n" +
-          "    npx chwijung-mcp connect <코드>\n\n" +
-          "[방법 2] 터미널 로그인\n" +
-          "  보안상 비밀번호는 AI 채팅에 입력하지 말고, 사용자가 직접 터미널에서 실행:\n" +
-          "    npx chwijung-mcp login\n" +
-          "  이메일/비밀번호를 묻고, 비밀번호는 입력 중 화면에 표시되지 않습니다.\n\n" +
-          "토큰만 로컬(~/.chwijung/session.json)에 캐시되며 이후 자동 회전되어 재로그인이 거의 필요 없습니다.\n" +
-          "Claude Code 사용자는 채팅창에 `! npx chwijung-mcp connect <코드>` 처럼 입력하면 이 세션에서 바로 실행됩니다.",
-      );
+      return loggedIn
+        ? text("현재 로그인되어 있습니다.")
+        : text("로그인 필요. 터미널: npx chwijung-mcp login  또는  웹 코드: npx chwijung-mcp connect <코드>");
     },
   );
 
@@ -222,9 +208,7 @@ export function registerTools(server: McpServer): void {
 
       try {
         const entry = await auth.submitDailyLog(client(), payload);
-        return text(
-          `데일리 로그 등록 완료 ✅ (id: ${entry.id ?? "?"}) — "${args.title}"`,
-        );
+        return text("데일리 로그 등록 완료 ✅");
       } catch (err) {
         if (err instanceof auth.NotLoggedInError) return text(err.message);
         if (err instanceof auth.NotStudentError) return text(err.message);
@@ -250,9 +234,7 @@ export function registerTools(server: McpServer): void {
       const tokenState = isAccessValid(session)
         ? "유효"
         : "만료(다음 호출 시 자동 갱신 또는 재로그인 필요)";
-      return text(
-        `로그인됨: ${name} (역할: ${session.user.role}, cohort: ${session.cohort_id}, 토큰: ${tokenState})`,
-      );
+      return text(`로그인됨: ${name} (토큰: ${tokenState})`);
     },
   );
 }
