@@ -11,7 +11,7 @@
  */
 
 import { execSync } from "node:child_process";
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -22,7 +22,7 @@ const CURRENT: string = (require("../package.json") as { version: string }).vers
 const API_URL =
   "https://api.github.com/repos/Chwijung/DailyLog-MCP/releases/latest";
 
-/** build/update.js 위치에서 두 단계 올라가면 리포지토리 루트 */
+/** build/update.js 위치에서 한 단계 올라가면 리포지토리 루트 */
 function repoRoot(): string {
   return resolve(dirname(fileURLToPath(import.meta.url)), "..");
 }
@@ -30,6 +30,22 @@ function repoRoot(): string {
 /** git 리포지토리인지 확인 (비정상적 설치 환경 방어) */
 function isGitRepo(root: string): boolean {
   return existsSync(resolve(root, ".git"));
+}
+
+/**
+ * 디스크의 package.json 버전을 다시 읽는다(require 캐시 우회).
+ * 모듈 로드 시점의 CURRENT 와 달리, git pull 이후의 실제 버전을 반영한다.
+ * 실패하면 null.
+ */
+export function readInstalledVersion(root: string): string | null {
+  try {
+    const pkg = JSON.parse(readFileSync(resolve(root, "package.json"), "utf8")) as {
+      version?: string;
+    };
+    return pkg.version?.replace(/^v/, "") ?? null;
+  } catch {
+    return null;
+  }
 }
 
 /** GitHub Releases API 에서 최신 태그를 가져온다. 실패하면 null. */
@@ -69,14 +85,33 @@ export async function checkAndUpdate(): Promise<void> {
   );
 
   try {
+    // 비대화형(GIT_TERMINAL_PROMPT=0)·ff-only·타임아웃으로 자격증명/머지 프롬프트나
+    // 네트워크 정지에 의한 무기한 블록을 막는다. stdout 은 MCP 전용이므로 "pipe" 유지.
     process.stderr.write(`  git pull ...\n`);
-    execSync("git pull", { cwd: root, stdio: "pipe" });
+    execSync("git pull --ff-only", {
+      cwd: root,
+      stdio: "pipe",
+      timeout: 30_000,
+      env: { ...process.env, GIT_TERMINAL_PROMPT: "0" },
+    });
+
+    // pull 후에도 latest 에 도달하지 못하면 이 체크아웃은 릴리스 채널을 추적하지 않는 것.
+    // build/install 을 건너뛰어 시작 때마다 같은 재빌드를 반복하는 루프를 끊는다.
+    const installed = readInstalledVersion(root);
+    if (installed !== latest) {
+      process.stderr.write(
+        `[chwijung-mcp] 이 체크아웃은 릴리스 v${latest}에 도달할 수 없어(현재 v${installed ?? "?"}) ` +
+          `자동 업데이트를 건너뜁니다.\n` +
+          `  릴리스 브랜치에서 실행하거나 수동으로 업데이트하세요.\n\n`,
+      );
+      return;
+    }
 
     process.stderr.write(`  npm run build ...\n`);
-    execSync("npm run build", { cwd: root, stdio: "pipe" });
+    execSync("npm run build", { cwd: root, stdio: "pipe", timeout: 120_000 });
 
     process.stderr.write(`  npm install -g . ...\n`);
-    execSync("npm install -g .", { cwd: root, stdio: "pipe" });
+    execSync("npm install -g .", { cwd: root, stdio: "pipe", timeout: 120_000 });
 
     process.stderr.write(`[chwijung-mcp] v${latest} 업데이트 완료. 재시작 중...\n\n`);
   } catch (err) {
@@ -99,7 +134,11 @@ export async function checkAndUpdate(): Promise<void> {
       stdio: "inherit",
       env: { ...process.env, CHWIJUNG_UPDATED: "1" },
     });
-  } finally {
     process.exit(0);
+  } catch (err) {
+    // 재실행 대상이 비정상 종료/시작 실패하면 그 종료코드를 그대로 전파한다.
+    // (finally 로 무조건 exit(0) 하면 실패를 성공으로 가려버린다.)
+    const status = (err as { status?: number | null }).status;
+    process.exit(typeof status === "number" ? status : 1);
   }
 }

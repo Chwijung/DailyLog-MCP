@@ -58,7 +58,7 @@ describe("cli", () => {
     const code = await loginCommand(io("s@e.com", "pw"), client);
     expect(code).toBe(0);
     expect((await loadSession())?.access_token).toBe("A");
-    expect(logs.join("\n")).toContain("로그인 성공");
+    expect(logs.join("\n")).toContain("로그인 완료");
   });
 
   it("login — 비학생 거부 + 세션 미저장", async () => {
@@ -105,7 +105,7 @@ describe("cli", () => {
     const code = await connectCommand({ log }, "CODE123", client);
     expect(code).toBe(0);
     expect((await loadSession())?.access_token).toBe("A");
-    expect(logs.join("\n")).toContain("연결 성공");
+    expect(logs.join("\n")).toContain("연결 완료");
   });
 
   it("connect — 코드 없으면 안내 후 실패", async () => {
