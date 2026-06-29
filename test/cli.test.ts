@@ -8,6 +8,7 @@ import {
   connectCommand,
   loginCommand,
   logoutCommand,
+  uninstallCommand,
   whoamiCommand,
 } from "../src/cli.js";
 import { ChwijungClient } from "../src/client.js";
@@ -138,5 +139,53 @@ describe("cli", () => {
     expect(logs.join("\n")).toContain("홍길동");
     expect(await logoutCommand({ log })).toBe(0);
     expect(await loadSession()).toBeNull();
+  });
+
+  it("uninstall — 확인 거부 시 삭제하지 않고 취소", async () => {
+    let called = false;
+    const code = await uninstallCommand(
+      { log },
+      {},
+      async () => false, // 사용자가 N 선택
+      async () => {
+        called = true;
+      },
+    );
+    expect(code).toBe(0);
+    expect(called).toBe(false);
+    expect(logs.join("\n")).toContain("취소되었습니다");
+  });
+
+  it("uninstall — 확인 승인 시 삭제 실행", async () => {
+    let called = false;
+    const code = await uninstallCommand(
+      { log },
+      {},
+      async () => true, // 사용자가 y 선택
+      async () => {
+        called = true;
+      },
+    );
+    expect(code).toBe(0);
+    expect(called).toBe(true);
+  });
+
+  it("uninstall — -y(yes)면 확인 없이 바로 삭제", async () => {
+    let confirmAsked = false;
+    let called = false;
+    const code = await uninstallCommand(
+      { log },
+      { yes: true },
+      async () => {
+        confirmAsked = true;
+        return true;
+      },
+      async () => {
+        called = true;
+      },
+    );
+    expect(code).toBe(0);
+    expect(confirmAsked).toBe(false);
+    expect(called).toBe(true);
   });
 });

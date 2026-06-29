@@ -153,6 +153,31 @@ npx chwijung-mcp logout    # 로그아웃
 
 ---
 
+## 🗑️ 전체 삭제 (언인스톨)
+
+설치가 남긴 흔적을 **한 번에** 정리합니다.
+
+```bash
+npx chwijung-mcp uninstall      # 확인 후 모두 삭제
+npx chwijung-mcp uninstall -y   # 확인 없이 바로 삭제 (--yes)
+```
+
+이 명령이 **자동으로 제거**하는 것:
+
+| 대상 | 방법 |
+|------|------|
+| 전역 명령 `chwijung-mcp` | `npm uninstall -g chwijung-mcp` |
+| 토큰 캐시 `~/.chwijung` | 폴더째 삭제 |
+| MCP 설정의 `chwijung` 항목 | `claude mcp remove` · `codex mcp remove` CLI + **현재 폴더**의 `.mcp.json`/`.cursor/mcp.json`, `~/.cursor/mcp.json`, `~/.gemini/config/mcp_config.json` 의 JSON 항목 |
+| 클론한 레포 폴더 | 현재 작업 폴더가 **레포 밖일 때** 폴더째 삭제 |
+
+> ⚠️ **수동 정리가 필요한 경우** (명령이 안내문으로 알려줍니다)
+> - **다른 프로젝트 폴더**의 `.mcp.json` / `.cursor/mcp.json` 항목은 자동 탐지되지 않아요 → 직접 제거
+> - **Codex CLI가 없으면** `~/.codex/config.toml` 의 `[mcp_servers.chwijung]` 블록을 직접 삭제
+> - **레포 폴더 안에서 실행**했거나(자기 자신은 못 지움) 파일이 잠겨 삭제가 실패하면, 출력된 `rm -rf` 명령을 레포 밖에서 직접 실행
+
+---
+
 ## ✍️ 데일리 로그 작성 규칙 & 글자 수 제한
 
 데일리 로그를 등록할 때는 아래 항목으로 작성됩니다. MCP가 백엔드로 보내기 **전에 먼저 검증**하기 때문에,
@@ -202,3 +227,4 @@ npx chwijung-mcp logout    # 로그아웃
 | `npx chwijung-mcp` 가 안 됨 | 1단계의 `npm run build` + `npm install -g .` 를 했는지, `node -v` ≥18 확인 |
 | MCP 서버가 안 뜸 | 전역 설치(`npm install -g .`) 여부, `node -v` ≥18 확인. `/mcp` 로 연결 상태 점검 |
 | 🪟 Windows에서 `npx` 가 전역 명령을 못 찾음 | 등록 설정의 `"command": "npx"` 를 `"command": "chwijung-mcp"` 로 바꿔보세요 |
+| 완전히 지우고 싶음 | `npx chwijung-mcp uninstall` (확인) 또는 `... -y` (즉시). 자동/수동 정리 범위는 위 **🗑️ 전체 삭제** 참고 |
