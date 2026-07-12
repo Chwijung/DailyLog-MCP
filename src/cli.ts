@@ -7,6 +7,7 @@
  *   chwijung-mcp connect <코드> 웹 'MCP 연결'에서 발급한 연결 코드로 세션을 캐시(터미널 비번 입력 불필요)
  *   chwijung-mcp logout       캐시된 세션 삭제
  *   chwijung-mcp whoami       현재 로그인 상태 출력
+ *   chwijung-mcp uninstall [-y] 전역 명령·토큰·MCP 설정·레포 폴더를 한 번에 삭제
  *
  * 보안: 비밀번호는 AI/LLM이 아니라 사람이 터미널에 직접 입력한다(에코 숨김).
  * 비밀번호는 LLM 대화/MCP 로그에 남지 않으며, 토큰만 ~/.chwijung/session.json 에 캐시된다.
@@ -22,6 +23,8 @@ import { BackendError, ChwijungClient } from "./client.js";
 import { getBaseUrl } from "./config.js";
 import { clearSession, isAccessValid, loadSession } from "./session.js";
 import { runStdioServer } from "./serve.js";
+import { type UninstallOptions, uninstall } from "./uninstall.js";
+import { checkAndUpdate } from "./update.js";
 
 export interface CliIO {
   readEmail: () => Promise<string>;
@@ -112,6 +115,28 @@ export async function whoamiCommand(io: Pick<CliIO, "log">): Promise<number> {
   return 0;
 }
 
+/**
+ * uninstall 서브커맨드: 전역 명령·토큰 캐시·MCP 설정·레포 폴더를 한 번에 삭제.
+ * 파괴적이므로 기본은 확인을 받고, opts.yes(=-y/--yes)면 확인을 건너뛴다.
+ * (confirm/doUninstall은 테스트에서 주입 가능 — 기본값은 실제 동작.)
+ */
+export async function uninstallCommand(
+  io: Pick<CliIO, "log">,
+  opts: { yes?: boolean } = {},
+  confirm: () => Promise<boolean> = realConfirm,
+  doUninstall: (o: UninstallOptions) => Promise<void> = uninstall,
+): Promise<number> {
+  if (!opts.yes) {
+    const ok = await confirm();
+    if (!ok) {
+      io.log("취소되었습니다.");
+      return 0;
+    }
+  }
+  await doUninstall({ log: io.log });
+  return 0;
+}
+
 // ==================== 실제 터미널 입출력 ====================
 
 // 제어 문자 코드
@@ -182,6 +207,14 @@ const realIO: CliIO = {
   log: (msg: string) => process.stdout.write(`${msg}\n`),
 };
 
+/** uninstall 확인 프롬프트. y/Y로 시작해야 진행. 비TTY/빈 입력은 취소(false)로 본다. */
+async function realConfirm(): Promise<boolean> {
+  const answer = await question(
+    "전역 명령·토큰·MCP 설정·레포 폴더를 모두 삭제합니다. 계속할까요? (y/N): ",
+  );
+  return /^y/i.test(answer.trim());
+}
+
 /**
  * 서브커맨드를 실행하고 종료코드를 반환한다.
  *
@@ -192,6 +225,10 @@ const realIO: CliIO = {
  */
 async function main(): Promise<number> {
   const cmd = process.argv[2];
+  // uninstall 직전에 자동 업데이트(git pull + install -g)가 돌면 *삭제 직전 재설치*가 되므로 제외.
+  if (cmd !== undefined && cmd !== "serve" && cmd !== "uninstall") {
+    await checkAndUpdate();
+  }
   switch (cmd) {
     case undefined:
     case "serve":
@@ -205,9 +242,14 @@ async function main(): Promise<number> {
       return logoutCommand(realIO);
     case "whoami":
       return whoamiCommand(realIO);
+    case "uninstall":
+      return uninstallCommand(realIO, {
+        yes: process.argv.includes("--yes") || process.argv.includes("-y"),
+      });
     default:
       process.stderr.write(
-        `알 수 없는 명령: ${cmd}\n사용법: chwijung-mcp [serve|login|connect <코드>|logout|whoami]\n`,
+        `알 수 없는 명령: ${cmd}\n` +
+          `사용법: chwijung-mcp [serve|login|connect <코드>|logout|whoami|uninstall [-y]]\n`,
       );
       return 2;
   }
