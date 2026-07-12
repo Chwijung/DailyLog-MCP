@@ -1,6 +1,6 @@
 {
   "name": "chwijung-mcp",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "취몽(Chwijung) 데일리 로그 자동 등록 MCP 서버",
   "type": "module",
   "bin": {
