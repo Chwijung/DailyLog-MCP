@@ -7,11 +7,13 @@
  *   chwijung-mcp connect <코드> 웹 'MCP 연결'에서 발급한 연결 코드로 세션을 캐시(터미널 비번 입력 불필요)
  *   chwijung-mcp logout       캐시된 세션 삭제
  *   chwijung-mcp whoami       현재 로그인 상태 출력
+ *   chwijung-mcp uninstall [-y] 전역 명령·토큰·MCP 설정·레포 폴더를 한 번에 삭제
  *
  * 보안: 비밀번호는 AI/LLM이 아니라 사람이 터미널에 직접 입력한다(에코 숨김).
  * 비밀번호는 LLM 대화/MCP 로그에 남지 않으며, 토큰만 ~/.chwijung/session.json 에 캐시된다.
  */
 
+import { realpathSync } from "node:fs";
 import readline from "node:readline";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -21,6 +23,8 @@ import { BackendError, ChwijungClient } from "./client.js";
 import { getBaseUrl } from "./config.js";
 import { clearSession, isAccessValid, loadSession } from "./session.js";
 import { runStdioServer } from "./serve.js";
+import { type UninstallOptions, uninstall } from "./uninstall.js";
+import { checkAndUpdate } from "./update.js";
 
 export interface CliIO {
   readEmail: () => Promise<string>;
@@ -46,10 +50,7 @@ export async function loginCommand(
   try {
     const session = await auth.loginAndStore(client, email, password);
     const name = session.user.full_name || session.user.email || "사용자";
-    io.log(
-      `로그인 성공: ${name}님 (cohort: ${session.cohort_id}). ` +
-        "이제 개발 세션을 마칠 때 submit_daily_log 로 데일리 로그가 자동 등록됩니다.",
-    );
+    io.log(`로그인 완료: ${name}님`);
     return 0;
   } catch (err) {
     if (err instanceof auth.NotStudentError) {
@@ -72,17 +73,14 @@ export async function connectCommand(
   if (!trimmed) {
     io.log(
       "연결 코드가 필요합니다. 웹 'MCP 연결'에서 발급한 코드로 아래처럼 실행하세요:\n" +
-        "    node ./chwijung-mcp/build/cli.js connect <코드>",
+        "    npx chwijung-mcp connect <코드>",
     );
     return 1;
   }
   try {
     const session = await auth.connectAndStore(client, trimmed);
     const name = session.user.full_name || session.user.email || "사용자";
-    io.log(
-      `연결 성공: ${name}님 (cohort: ${session.cohort_id}). ` +
-        "이제 개발 세션을 마칠 때 submit_daily_log 로 데일리 로그가 자동 등록됩니다.",
-    );
+    io.log(`연결 완료: ${name}님`);
     return 0;
   } catch (err) {
     if (err instanceof auth.NotStudentError) {
@@ -106,16 +104,36 @@ export async function logoutCommand(io: Pick<CliIO, "log">): Promise<number> {
 export async function whoamiCommand(io: Pick<CliIO, "log">): Promise<number> {
   const session = await loadSession();
   if (!session) {
-    io.log("로그인되어 있지 않습니다. `npx chwijung-mcp login` 을 실행하세요.");
+    io.log("로그인되어 있지 않습니다. `chwijung-mcp login` 을 실행하세요.");
     return 1;
   }
   const name = session.user.full_name || session.user.email || "사용자";
   const tokenState = isAccessValid(session)
     ? "유효"
     : "만료(다음 호출 시 자동 갱신 또는 재로그인 필요)";
-  io.log(
-    `로그인됨: ${name} (역할: ${session.user.role}, cohort: ${session.cohort_id}, 토큰: ${tokenState})`,
-  );
+  io.log(`로그인됨: ${name} (토큰: ${tokenState})`);
+  return 0;
+}
+
+/**
+ * uninstall 서브커맨드: 전역 명령·토큰 캐시·MCP 설정·레포 폴더를 한 번에 삭제.
+ * 파괴적이므로 기본은 확인을 받고, opts.yes(=-y/--yes)면 확인을 건너뛴다.
+ * (confirm/doUninstall은 테스트에서 주입 가능 — 기본값은 실제 동작.)
+ */
+export async function uninstallCommand(
+  io: Pick<CliIO, "log">,
+  opts: { yes?: boolean } = {},
+  confirm: () => Promise<boolean> = realConfirm,
+  doUninstall: (o: UninstallOptions) => Promise<void> = uninstall,
+): Promise<number> {
+  if (!opts.yes) {
+    const ok = await confirm();
+    if (!ok) {
+      io.log("취소되었습니다.");
+      return 0;
+    }
+  }
+  await doUninstall({ log: io.log });
   return 0;
 }
 
@@ -189,47 +207,95 @@ const realIO: CliIO = {
   log: (msg: string) => process.stdout.write(`${msg}\n`),
 };
 
-async function main(): Promise<void> {
+/** uninstall 확인 프롬프트. y/Y로 시작해야 진행. 비TTY/빈 입력은 취소(false)로 본다. */
+async function realConfirm(): Promise<boolean> {
+  const answer = await question(
+    "전역 명령·토큰·MCP 설정·레포 폴더를 모두 삭제합니다. 계속할까요? (y/N): ",
+  );
+  return /^y/i.test(answer.trim());
+}
+
+/**
+ * 서브커맨드를 실행하고 종료코드를 반환한다.
+ *
+ * 주의: 여기서 `process.exit()`를 직접 호출하지 않는다. 출력을 파이프나 파일로
+ * 리다이렉트한 경우, stdout 버퍼가 비워지기 전에 프로세스가 종료되어 메시지가
+ * 잘릴 수 있다(Node에서 `process.exit()`는 대기 중인 쓰기를 기다리지 않는다).
+ * 대신 종료코드만 반환하고, 진입점에서 `process.exitCode`로 설정해 자연 종료시킨다.
+ */
+async function main(): Promise<number> {
   const cmd = process.argv[2];
+  // uninstall 직전에 자동 업데이트(git pull + install -g)가 돌면 *삭제 직전 재설치*가 되므로 제외.
+  if (cmd !== undefined && cmd !== "serve" && cmd !== "uninstall") {
+    await checkAndUpdate();
+  }
   switch (cmd) {
     case undefined:
     case "serve":
       await runStdioServer();
-      return;
+      return 0;
     case "login":
-      process.exit(await loginCommand(realIO));
-      return;
+      return loginCommand(realIO);
     case "connect":
-      process.exit(await connectCommand(realIO, process.argv[3] ?? ""));
-      return;
+      return connectCommand(realIO, process.argv[3] ?? "");
     case "logout":
-      process.exit(await logoutCommand(realIO));
-      return;
+      return logoutCommand(realIO);
     case "whoami":
-      process.exit(await whoamiCommand(realIO));
-      return;
+      return whoamiCommand(realIO);
+    case "uninstall":
+      return uninstallCommand(realIO, {
+        yes: process.argv.includes("--yes") || process.argv.includes("-y"),
+      });
     default:
       process.stderr.write(
-        `알 수 없는 명령: ${cmd}\n사용법: chwijung-mcp [serve|login|connect <코드>|logout|whoami]\n`,
+        `알 수 없는 명령: ${cmd}\n` +
+          `사용법: chwijung-mcp [serve|login|connect <코드>|logout|whoami|uninstall [-y]]\n`,
       );
-      process.exit(2);
+      return 2;
   }
 }
 
-/** 이 파일이 직접 실행된 진입점인지(테스트 import가 아니라) 판별. */
+/** 경로의 심볼릭/junction 링크를 실제 경로로 해석한다. 실패하면 입력을 그대로 반환. */
+function canonicalPath(p: string): string {
+  try {
+    return realpathSync(p);
+  } catch {
+    return p;
+  }
+}
+
+/**
+ * 이 파일이 직접 실행된 진입점인지(테스트 import가 아니라) 판별.
+ * 전역 설치(`npm install -g .` / `npm link`)는 글로벌 node_modules를 소스 폴더로 가리키는
+ * symlink/junction을 만든다. 이때 `process.argv[1]`은 symlink 경로, `import.meta.url`은
+ * 실제 경로로 해석돼 단순 비교가 어긋난다 → 양쪽 모두 realpath로 풀어 비교한다.
+ */
 function isEntryPoint(): boolean {
   const entry = process.argv[1];
   if (!entry) return false;
+  const canonical = (p: string): string => {
+    try {
+      return realpathSync(p).toLowerCase();
+    } catch {
+      return resolve(p).toLowerCase();
+    }
+  };
   try {
-    return resolve(fileURLToPath(import.meta.url)).toLowerCase() === resolve(entry).toLowerCase();
+    return canonical(fileURLToPath(import.meta.url)) === canonical(entry);
   } catch {
     return false;
   }
 }
 
 if (!process.env.VITEST && isEntryPoint()) {
-  main().catch((err) => {
-    console.error("chwijung-mcp fatal:", err);
-    process.exit(1);
-  });
+  // process.exit()를 피하고 종료코드만 설정한다 → 이벤트 루프가 비면서
+  // 대기 중인 stdout 쓰기가 끝난 뒤 그 코드로 자연 종료된다(출력 잘림 방지).
+  main()
+    .then((code) => {
+      process.exitCode = code;
+    })
+    .catch((err) => {
+      console.error("chwijung-mcp fatal:", err);
+      process.exitCode = 1;
+    });
 }
