@@ -143,6 +143,12 @@ describe("maskSecrets", () => {
     expect(maskSecrets("API_KEY=abc123")).toBe("API_KEY=[MASKED]");
   });
 
+  it("값 뒤에 붙은 닫는 괄호는 남긴다 (실제 Claude Code 실행에서 발견)", () => {
+    expect(maskSecrets("(테스트 값: password=hunter2)")).toBe("(테스트 값: password=[MASKED])");
+    expect(maskSecrets("[token=abc] 끝")).toBe("[token=[MASKED]] 끝");
+    expect(maskSecrets("password=a)b 끝")).toBe("password=[MASKED] 끝");
+  });
+
   it("개인 키 블록을 가린다", () => {
     const pem = "-----BEGIN RSA PRIVATE KEY-----\nMIIabc\n-----END RSA PRIVATE KEY-----";
     expect(maskSecrets(`키: ${pem}`)).toBe("키: [MASKED]");

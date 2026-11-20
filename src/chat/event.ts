@@ -43,8 +43,10 @@ const SECRET_PATTERNS: RegExp[] = [
   /\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}/g, // JWT (Supabase 키 포함)
 ];
 
-// "password: hunter2", "API_KEY=abc" — 값이 바로 붙어 있을 때만
-const KEY_VALUE = /\b([A-Za-z_]*(?:password|passwd|pwd|secret|token|api[_-]?key)[A-Za-z_]*)\s*[:=]\s*(?!\[MASKED\])[^\s,;'"]+/gi;
+// "password: hunter2", "API_KEY=abc" — 값이 바로 붙어 있을 때만.
+// 값 끝에 붙은 닫는 괄호("(password=x)")는 문장 부호로 보고 남긴다.
+const KEY_VALUE =
+  /\b([A-Za-z_]*(?:password|passwd|pwd|secret|token|api[_-]?key)[A-Za-z_]*)\s*[:=]\s*(?!\[MASKED\])[^\s,;'"]+?(?=[)\]}>]*(?:[\s,;'"]|$))/gi;
 
 /** 프롬프트 안의 흔한 키·토큰·비밀번호 값을 [MASKED]로 바꾼다. */
 export function maskSecrets(text: string): string {
