@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   type CliIO,
   connectCommand,
+  hooksCommand,
   loginCommand,
   logoutCommand,
   uninstallCommand,
@@ -187,5 +188,66 @@ describe("cli", () => {
     expect(code).toBe(0);
     expect(confirmAsked).toBe(false);
     expect(called).toBe(true);
+  });
+});
+
+// ==================== hooks (AI 대화 기록) ====================
+
+describe("hooksCommand", () => {
+  const CMD = '"C:/node.exe" "E:/DailyLog-MCP/build/cli.js" hook --agent claude';
+  const settingsAt = (base: string): string => join(base, ".claude", "settings.json");
+
+  async function student(): Promise<void> {
+    await saveSession({
+      access_token: "A",
+      refresh_token: "R",
+      expires_at: Date.now() / 1000 + 3600,
+      cohort_id: "c1",
+      user: { id: "u1", role: "student" },
+    });
+  }
+
+  it("로그인 전에는 설치하지 않는다", async () => {
+    const code = await hooksCommand({ log }, ["install", "-y"], { cwd: dir, home: dir, command: CMD });
+    expect(code).toBe(1);
+    expect(existsSync(settingsAt(dir))).toBe(false);
+  });
+
+  it("동의 안내를 보여주고, 거절하면 설치하지 않는다", async () => {
+    await student();
+    const code = await hooksCommand({ log }, ["install"], {
+      cwd: dir,
+      home: join(dir, "home"),
+      command: CMD,
+      confirm: async () => false,
+    });
+    expect(code).toBe(0);
+    expect(logs.join("\n")).toContain("프롬프트 원문");
+    expect(logs.join("\n")).toContain("취소");
+    expect(existsSync(settingsAt(dir))).toBe(false);
+  });
+
+  it("기본은 현재 폴더, --global은 홈에 설치하고 status·uninstall이 둘 다 본다", async () => {
+    await student();
+    const home = join(dir, "home");
+    await hooksCommand({ log }, ["install", "-y"], { cwd: dir, home, command: CMD });
+    expect(existsSync(settingsAt(dir))).toBe(true);
+    expect(existsSync(settingsAt(home))).toBe(false);
+
+    await hooksCommand({ log }, ["install", "--global", "-y"], { cwd: dir, home, command: CMD });
+    expect(existsSync(settingsAt(home))).toBe(true);
+
+    logs.length = 0;
+    await hooksCommand({ log }, ["status"], { cwd: dir, home });
+    expect(logs.filter((l) => l.includes("켜짐"))).toHaveLength(2);
+
+    logs.length = 0;
+    await hooksCommand({ log }, ["uninstall"], { cwd: dir, home });
+    await hooksCommand({ log }, ["status"], { cwd: dir, home });
+    expect(logs.filter((l) => l.includes("꺼짐"))).toHaveLength(2);
+  });
+
+  it("모르는 하위 명령은 2", async () => {
+    expect(await hooksCommand({ log }, ["nope"])).toBe(2);
   });
 });
