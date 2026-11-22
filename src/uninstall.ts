@@ -19,6 +19,7 @@ import { homedir } from "node:os";
 import { dirname, join, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { claudeSettingsPath, uninstallClaudeHooks } from "./hooks-install.js";
 import { clearSession } from "./session.js";
 
 /** npm 전역 패키지명 / MCP 서버 등록 이름 */
@@ -142,6 +143,16 @@ export async function uninstall(opts: UninstallOptions = {}): Promise<void> {
     "   ※ 다른 프로젝트 폴더의 .mcp.json / .cursor/mcp.json 항목은 자동 탐지되지 않습니다 — 직접 제거하세요.\n" +
       `   ※ Codex CLI가 없으면 ~/.codex/config.toml 의 [mcp_servers.${SERVER}] 블록을 직접 삭제하세요.\n`,
   );
+
+  // 1-1) AI 대화 기록 hook 제거 (현재 폴더 + 전역 Claude Code 설정)
+  for (const scope of ["project", "global"] as const) {
+    const path = claudeSettingsPath(scope, cwd, home);
+    try {
+      if (await uninstallClaudeHooks(path)) log(`   - ${path}: AI 대화 기록 hook 제거`);
+    } catch {
+      // 개별 파일 실패는 무시
+    }
+  }
 
   // 2) 토큰 캐시(~/.chwijung) 제거 — 문서상 고정 경로만 삭제한다.
   //    CHWIJUNG_SESSION_FILE override(테스트용)가 가리키는 부모 디렉터리를 통째로
