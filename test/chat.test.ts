@@ -480,7 +480,15 @@ describe("hookCommand", () => {
   });
 
   it("깨진 입력·전송 실패에도 항상 0으로 끝난다", async () => {
-    const failing = new ChwijungClient("http://test", mockFetch(() => ({ status: 500, body: {} })));
+    await loginAsStudent(); // 학생 세션이 있어야 실제 전송 경로까지 간다
+    let attempts = 0;
+    const failing = new ChwijungClient(
+      "http://test",
+      mockFetch(() => {
+        attempts++;
+        return { status: 500, body: {} };
+      }),
+    );
     expect(await hookCommand("{oops", { agent: "claude", client: failing })).toBe(0);
     expect(
       await hookCommand(JSON.stringify({ session_id: "s", hook_event_name: "Stop" }), {
@@ -488,6 +496,8 @@ describe("hookCommand", () => {
         client: failing,
       }),
     ).toBe(0);
+    expect(attempts).toBe(1);
+    expect(await readPending(10, u1())).toHaveLength(1); // 실패한 건 다음 Stop을 위해 남김
   });
 
   it("로그인 안 했거나 학생이 아니면 대화를 대기열에 남기지 않는다", async () => {
