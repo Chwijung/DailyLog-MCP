@@ -10,16 +10,20 @@
 
 import { type ChatAgent, buildEvent } from "./chat/event.js";
 import { flushChat } from "./chat/flush.js";
-import { enqueue } from "./chat/spool.js";
+import { enqueue, userChatDir } from "./chat/spool.js";
 import { ChwijungClient } from "./client.js";
 import { getBaseUrl } from "./config.js";
+import { loadSession } from "./session.js";
 
-/** Stop 때 서버 전송에 쓰는 최대 시간. hook timeout(설치 시 10초)보다 짧게. */
+/** 요청 하나(세션 갱신·묶음 전송)의 최대 시간. */
 const SEND_TIMEOUT_MS = 4000;
+/** Stop 때 세션 갱신부터 마지막 묶음까지 전체 최대 시간. hook timeout(설치 시 10초)보다 짧게. */
+const FLUSH_BUDGET_MS = 7000;
 
 export interface HookOptions {
   agent: ChatAgent;
   client?: ChwijungClient;
+  /** 대기열 최상위 폴더 (기본 ~/.chwijung/chat-spool) */
   dir?: string;
 }
 
@@ -27,10 +31,16 @@ export async function hookCommand(stdin: string, opts: HookOptions): Promise<num
   try {
     const event = buildEvent(JSON.parse(stdin), opts.agent);
     if (!event) return 0;
-    await enqueue(event, opts.dir);
+    // 로그인한 학생 계정의 폴더에만 쌓는다. 로그아웃·학생 아님이면 남기지 않는다
+    // (나중에 다른 계정으로 로그인했을 때 그 계정으로 보내지 않게). 네트워크 없이 세션 파일만 읽는다.
+    const session = await loadSession();
+    if (session?.user.role !== "student") return 0;
+    const dir = userChatDir(session.user.id, opts.dir);
+    if (!dir) return 0;
+    await enqueue(event, dir);
     if (event.type === "stop") {
       const client = opts.client ?? new ChwijungClient(getBaseUrl());
-      await flushChat(client, { dir: opts.dir, timeoutMs: SEND_TIMEOUT_MS });
+      await flushChat(client, { dir: opts.dir, timeoutMs: SEND_TIMEOUT_MS, budgetMs: FLUSH_BUDGET_MS });
     }
   } catch {
     // 조용히 넘어간다: 대기열에 남은 건 다음 Stop 때 다시 보낸다.

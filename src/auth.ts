@@ -107,8 +107,14 @@ export async function connectAndStore(
   return storeStudentSession(data);
 }
 
-/** 유효한 access_token을 가진 세션을 반환. 만료 시 갱신, 불가하면 NotLoggedInError. */
-export async function getActiveSession(client: ChwijungClient): Promise<SessionData> {
+/**
+ * 유효한 access_token을 가진 세션을 반환. 만료 시 갱신, 불가하면 NotLoggedInError.
+ * timeoutMs: 갱신 요청의 최대 시간 (hook처럼 시간 제한이 있는 곳에서 쓴다).
+ */
+export async function getActiveSession(
+  client: ChwijungClient,
+  opts: { timeoutMs?: number } = {},
+): Promise<SessionData> {
   const session = await loadSession();
   if (!session) throw new NotLoggedInError("로그인이 필요합니다. 터미널에서 `chwijung-mcp login`을 실행하세요.");
 
@@ -121,7 +127,7 @@ export async function getActiveSession(client: ChwijungClient): Promise<SessionD
 
   let data: Record<string, any>;
   try {
-    data = await client.refresh(session.refresh_token);
+    data = await client.refresh(session.refresh_token, opts.timeoutMs);
   } catch (err) {
     if (err instanceof AuthError) {
       await clearSession();

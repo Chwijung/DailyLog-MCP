@@ -25,7 +25,7 @@ import { fileURLToPath } from "node:url";
 import * as auth from "./auth.js";
 import { BackendError, ChwijungClient } from "./client.js";
 import { getBaseUrl } from "./config.js";
-import { countPending } from "./chat/spool.js";
+import { countPending, userChatDir } from "./chat/spool.js";
 import { hookCommand, readStdin } from "./hook.js";
 import {
   claudeSettingsPath,
@@ -225,7 +225,9 @@ export async function hooksCommand(
       const events = await listInstalledHooks(path);
       io.log(`${label}: ${events.length ? `켜짐 (${events.join(", ")})` : "꺼짐"} — ${path}`);
     }
-    io.log(`보내지 못한 기록: ${await countPending()}건 (다음 응답이 끝날 때 다시 보냅니다)`);
+    const dir = userChatDir((await loadSession())?.user.id);
+    const pending = dir ? await countPending(dir) : 0;
+    io.log(`보내지 못한 기록: ${pending}건 (다음 응답이 끝날 때 다시 보냅니다)`);
     return 0;
   }
 

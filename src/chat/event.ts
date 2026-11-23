@@ -43,16 +43,22 @@ const SECRET_PATTERNS: RegExp[] = [
   /\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}/g, // JWT (Supabase 키 포함)
 ];
 
-// "password: hunter2", "API_KEY=abc" — 값이 바로 붙어 있을 때만.
-// 값 끝에 붙은 닫는 괄호("(password=x)")는 문장 부호로 보고 남긴다.
+// "password: hunter2", "API_KEY=abc", 'password="hunter 2"', '{"password":"x"}'.
+// 1: 키를 감싼 따옴표, 2: 키, 3: 구분자, 4: 값을 감싼 따옴표 (있으면 따옴표 안 전체가 값).
+// 따옴표 없는 값 끝에 붙은 닫는 괄호("(password=x)")는 문장 부호로 보고 남긴다.
 const KEY_VALUE =
-  /\b([A-Za-z_]*(?:password|passwd|pwd|secret|token|api[_-]?key)[A-Za-z_]*)\s*[:=]\s*(?!\[MASKED\])[^\s,;'"]+?(?=[)\]}>]*(?:[\s,;'"]|$))/gi;
+  /(["']?)\b([A-Za-z_]*(?:password|passwd|pwd|secret|token|api[_-]?key)[A-Za-z_]*)\1(\s*[:=]\s*)(?:(["'])(?!\[MASKED\]\4)(?:\\.|(?!\4)[^\\])*\4|(?!\[MASKED\])[^\s,;'"]+?(?=[)\]}>]*(?:[\s,;'"]|$)))/gi;
 
 /** 프롬프트 안의 흔한 키·토큰·비밀번호 값을 [MASKED]로 바꾼다. */
 export function maskSecrets(text: string): string {
   let out = text;
   for (const pattern of SECRET_PATTERNS) out = out.replace(pattern, MASK);
-  return out.replace(KEY_VALUE, (_m, key: string) => `${key}=${MASK}`);
+  return out.replace(KEY_VALUE, (_m, keyQuote: string, key: string, sep: string, valueQuote?: string) => {
+    // 따옴표가 없으면 예전처럼 "key=[MASKED]", 있으면 JSON·코드 모양을 그대로 둔다
+    if (!keyQuote && !valueQuote) return `${key}=${MASK}`;
+    const q = valueQuote ?? "";
+    return `${keyQuote}${key}${keyQuote}${sep}${q}${MASK}${q}`;
+  });
 }
 
 /** 전체 경로 대신 마지막 폴더 이름만 (Windows·POSIX 모두). */
