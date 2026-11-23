@@ -48,11 +48,14 @@ async function listFiles(dir: string): Promise<string[]> {
   }
 }
 
-/** 본인만 들어갈 수 있는 폴더로 만든다. 이미 있던 폴더도 권한을 좁힌다. */
+/**
+ * 본인만 들어갈 수 있는 폴더로 만든다. 이미 있던 폴더도 권한을 좁힌다.
+ * POSIX에서 권한을 좁히지 못하면 예외를 던져 프롬프트를 저장하지 않는다 (hook은 조용히 넘어감).
+ */
 async function ensurePrivateDir(dir: string): Promise<void> {
   await fs.mkdir(dir, { recursive: true, mode: 0o700 });
   if (process.platform === "win32") return;
-  await fs.chmod(dir, 0o700).catch(() => undefined);
+  await fs.chmod(dir, 0o700);
 }
 
 export async function enqueue(event: ChatEvent, dir: string = chatDir()): Promise<void> {

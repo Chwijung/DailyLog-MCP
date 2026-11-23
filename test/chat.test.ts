@@ -220,6 +220,22 @@ describe("spool", () => {
     expect(statSync(join(spool, file)).mode & 0o777).toBe(0o600);
   });
 
+  it.skipIf(process.platform === "win32")("폴더 권한을 좁히지 못하면 저장하지 않는다", async () => {
+    const fs = await import("node:fs");
+    const orig = fs.promises.chmod;
+    fs.promises.chmod = (async () => {
+      throw new Error("EPERM");
+    }) as any;
+    try {
+      await expect(
+        enqueue(buildEvent({ session_id: "s", hook_event_name: "Stop" }, "claude", NOW, ids)!),
+      ).rejects.toThrow("EPERM");
+    } finally {
+      fs.promises.chmod = orig;
+    }
+    expect(readdirSync(spool).filter((f) => f.endsWith(".json") || f.endsWith(".tmp"))).toEqual([]);
+  });
+
   it("userChatDir은 안전한 사용자 id만 받는다", () => {
     expect(userChatDir("u1")).toBe(join(spool, "u1"));
     expect(userChatDir("../evil")).toBeNull();
