@@ -130,6 +130,14 @@ export async function getActiveSession(
     data = await client.refresh(session.refresh_token, opts.timeoutMs);
   } catch (err) {
     if (err instanceof AuthError) {
+      // 같은 refresh_token으로 다른 프로세스(동시에 끝난 다른 hook 등)가 먼저 갱신해 새 세션을
+      // 저장했을 수 있다. 그 세션은 지우지 않는다. 파일 잠금은 없으므로 지우기 직전에 다시 읽어
+      // 겹치는 구간을 최소로 줄인다 (남는 최악의 경우는 다시 로그인).
+      const latest = await loadSession();
+      if (latest && latest.refresh_token !== session.refresh_token) {
+        if (isAccessValid(latest)) return latest;
+        throw new NotLoggedInError("세션이 방금 다른 곳에서 갱신되었습니다. 다시 시도하세요.");
+      }
       await clearSession();
       throw new NotLoggedInError("세션이 만료되었습니다. 터미널에서 `chwijung-mcp login`으로 다시 로그인하세요.");
     }
