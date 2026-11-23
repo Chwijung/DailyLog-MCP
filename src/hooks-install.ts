@@ -2,7 +2,8 @@
  * Claude Code settings.json 에 대화 기록 hook을 넣고 빼기.
  *
  * - 다른 설정과 다른 hook은 건드리지 않는다. 쓰기 전에 `.bak` 백업.
- * - 우리 항목은 명령 모양(`… hook --agent claude` + 경로에 chwijung/DailyLog-MCP)으로 찾는다.
+ * - 우리 항목은 명령 끝의 소유 표식(`… hook --agent claude --owner chwijung-mcp`)으로 찾는다.
+ *   표식이 없던 옛 설치는 경로에 chwijung/DailyLog-MCP가 있으면 우리 것으로 본다.
  * - hook 명령은 node·cli.js 절대 경로로 쓴다. 맨 이름(`chwijung-mcp`)은 앱이 설치 전 PATH를
  *   들고 있으면 `command not found` 로 모든 hook이 깨진다.
  * - Codex는 hook 설정 형식이 버전마다 달라 아직 자동 설치하지 않는다 (hook 명령 자체는 --agent codex 지원).
@@ -17,7 +18,7 @@ import type { ChatAgent } from "./chat/event.js";
 
 export const CLAUDE_HOOK_EVENTS = ["UserPromptSubmit", "PostToolUse", "Stop"] as const;
 
-/** hook 하나가 쓸 수 있는 최대 시간(초). Stop 때 전송(최대 4초)보다 넉넉하게. */
+/** hook 하나가 쓸 수 있는 최대 시간(초). Stop 때 전송(전체 최대 7초)보다 넉넉하게. */
 const HOOK_TIMEOUT_SECONDS = 10;
 
 interface HookEntry {
@@ -42,21 +43,23 @@ export function defaultCliPath(): string {
 
 const slash = (p: string): string => p.replace(/\\/g, "/");
 
+/** 우리가 설치한 hook 명령 끝에 붙이는 소유 표식. 설치 경로 이름과 상관없이 알아보려고 쓴다. */
+const OWNER_MARK = "--owner chwijung-mcp";
+
 /** bash·cmd 어느 쪽에서 실행돼도 되게 슬래시 경로 + 큰따옴표. */
 export function hookCommandLine(
   agent: ChatAgent,
   nodePath: string = process.execPath,
   cliPath: string = defaultCliPath(),
 ): string {
-  return `"${slash(nodePath)}" "${slash(cliPath)}" hook --agent ${agent}`;
+  return `"${slash(nodePath)}" "${slash(cliPath)}" hook --agent ${agent} ${OWNER_MARK}`;
 }
 
+/** 소유 표식이 있거나, 표식 없던 옛 설치(경로에 chwijung/DailyLog-MCP)면 우리 hook. */
 export function isChwijungHook(command: unknown): boolean {
-  return (
-    typeof command === "string" &&
-    / hook --agent (claude|codex)$/.test(command) &&
-    /chwijung|dailylog-mcp/i.test(command)
-  );
+  if (typeof command !== "string") return false;
+  if (new RegExp(` hook --agent (claude|codex) ${OWNER_MARK}$`).test(command)) return true;
+  return / hook --agent (claude|codex)$/.test(command) && /chwijung|dailylog-mcp/i.test(command);
 }
 
 async function readSettings(path: string): Promise<{ data: Settings; raw: string | null }> {

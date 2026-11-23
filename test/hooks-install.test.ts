@@ -29,7 +29,7 @@ const read = (): any => JSON.parse(readFileSync(settings, "utf-8"));
 
 describe("hookCommandLine", () => {
   it("node·cli 절대 경로를 슬래시로 바꿔 따옴표로 감싼다", () => {
-    expect(CMD).toBe('"C:/nodejs/node.exe" "E:/DailyLog-MCP/build/cli.js" hook --agent claude');
+    expect(CMD).toBe('"C:/nodejs/node.exe" "E:/DailyLog-MCP/build/cli.js" hook --agent claude --owner chwijung-mcp');
     expect(isChwijungHook(CMD)).toBe(true);
     expect(isChwijungHook("rtk hook claude")).toBe(false);
   });
@@ -117,5 +117,32 @@ describe("uninstallClaudeHooks / listInstalledHooks", () => {
   it("파일이 없으면 false", async () => {
     expect(await uninstallClaudeHooks(settings)).toBe(false);
     expect(await listInstalledHooks(settings)).toEqual([]);
+  });
+});
+
+describe("경로에 chwijung·DailyLog-MCP 이름이 없을 때 (CodeRabbit #10 리뷰)", () => {
+  const PLAIN = hookCommandLine("claude", "/usr/bin/node", "/opt/tools/mcp/build/cli.js");
+
+  it("소유 표식으로 우리 hook을 알아본다", () => {
+    expect(isChwijungHook(PLAIN)).toBe(true);
+    expect(isChwijungHook('"/usr/bin/node" "/opt/other/cli.js" hook --agent claude')).toBe(false);
+  });
+
+  it("설치·재설치·조회·제거가 모두 된다", async () => {
+    expect(await installClaudeHooks(settings, PLAIN)).toBe("installed");
+    expect(await installClaudeHooks(settings, PLAIN)).toBe("already");
+    expect(read().hooks.Stop).toHaveLength(1);
+    expect(await listInstalledHooks(settings)).toEqual(CLAUDE_HOOK_EVENTS);
+    expect(await uninstallClaudeHooks(settings)).toBe(true);
+    expect(existsSync(settings) && read().hooks).toBeFalsy();
+  });
+
+  it("표식 없는 옛 항목(chwijung 경로)도 계속 알아보고 새 명령으로 바꾼다", async () => {
+    const legacy = '"C:/node.exe" "C:/npm/node_modules/chwijung-mcp/build/cli.js" hook --agent claude';
+    expect(isChwijungHook(legacy)).toBe(true);
+    await installClaudeHooks(settings, legacy);
+    expect(await installClaudeHooks(settings, PLAIN)).toBe("installed");
+    const stopCommands = read().hooks.Stop.flatMap((g: any) => g.hooks.map((h: any) => h.command));
+    expect(stopCommands).toEqual([PLAIN]);
   });
 });

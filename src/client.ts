@@ -71,11 +71,12 @@ export class ChwijungClient {
   }
 
   /** POST /auth/refresh → 새 access_token (+ 회전된 refresh_token, 백엔드가 반환 시). */
-  async refresh(refreshToken: string): Promise<Record<string, any>> {
+  async refresh(refreshToken: string, timeoutMs?: number): Promise<Record<string, any>> {
     const res = await this.fetchFn(`${this.apiBase}/auth/refresh`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ refresh_token: refreshToken }),
+      ...(timeoutMs ? { signal: AbortSignal.timeout(timeoutMs) } : {}),
     });
     if (res.status === 401) throw new AuthError((await readDetail(res)) ?? "토큰 갱신에 실패했습니다", 401);
     if (!res.ok) throw new BackendError(`토큰 갱신 실패 (HTTP ${res.status})`, res.status);
