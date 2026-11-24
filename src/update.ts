@@ -12,13 +12,9 @@
 
 import { execSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
-import { createRequire } from "node:module";
 import { constants } from "node:os";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-
-const require = createRequire(import.meta.url);
-const CURRENT: string = (require("../package.json") as { version: string }).version;
 
 const API_URL =
   "https://api.github.com/repos/Chwijung/DailyLog-MCP/releases/latest";
@@ -34,8 +30,7 @@ function isGitRepo(root: string): boolean {
 }
 
 /**
- * 디스크의 package.json 버전을 다시 읽는다(require 캐시 우회).
- * 모듈 로드 시점의 CURRENT 와 달리, git pull 이후의 실제 버전을 반영한다.
+ * 디스크의 package.json 버전을 읽는다. git pull 이후의 실제 소스 버전을 반영한다.
  * 실패하면 null.
  */
 export function readInstalledVersion(root: string): string | null {
@@ -46,6 +41,43 @@ export function readInstalledVersion(root: string): string | null {
     return pkg.version?.replace(/^v/, "") ?? null;
   } catch {
     return null;
+  }
+}
+
+/**
+ * build/ 를 만든 소스 버전을 읽는다(scripts/write-build-version.mjs 가 기록).
+ * 소스만 받고 빌드하지 않으면 package.json 과 달라진다. 기록이 없으면 null.
+ */
+export function readBuiltVersion(root: string): string | null {
+  try {
+    return readFileSync(resolve(root, "build", ".version"), "utf8").trim() || null;
+  } catch {
+    return null;
+  }
+}
+
+/** 비대화형(GIT_TERMINAL_PROMPT=0)·ff-only·타임아웃으로 프롬프트나 네트워크 정지에 의한 무기한 블록을 막는다. */
+function runGitPull(root: string): void {
+  execSync("git pull --ff-only", {
+    cwd: root,
+    stdio: "pipe",
+    timeout: 30_000,
+    env: { ...process.env, GIT_TERMINAL_PROMPT: "0" },
+  });
+}
+
+/**
+ * git pull. npm install 이 바꿔 놓은 package-lock.json 이 pull 을 막은 경우에만
+ * 그 파일을 되돌리고 한 번 더 받는다.
+ */
+function pullSource(root: string): void {
+  try {
+    runGitPull(root);
+  } catch (err) {
+    const stderr = String((err as { stderr?: unknown } | null)?.stderr ?? "");
+    if (!stderr.includes("package-lock.json")) throw err;
+    execSync("git checkout -- package-lock.json", { cwd: root, stdio: "pipe", timeout: 30_000 });
+    runGitPull(root);
   }
 }
 
@@ -85,32 +117,25 @@ export function exitCodeFromExecError(err: unknown): number {
  * 업데이트·재실행에 성공하면 이 함수는 반환하지 않는다(호출자 프로세스가 대체됨).
  * 업데이트가 불필요하거나 실패하면 정상 반환한다.
  */
-export async function checkAndUpdate(): Promise<void> {
+export async function checkAndUpdate(root: string = repoRoot()): Promise<void> {
   // 방금 업데이트 직후 재실행된 프로세스는 다시 확인하지 않는다
   if (process.env.CHWIJUNG_UPDATED) return;
-
-  const root = repoRoot();
 
   // git 리포지토리가 아니면 자동 업데이트 불가 — 건너뜀
   if (!isGitRepo(root)) return;
 
   const latest = await fetchLatest();
-  if (!latest || latest === CURRENT) return;
+  // package.json 이 아니라 빌드된 버전과 비교한다. 소스만 먼저 받은 설치본도 다시 빌드되게 한다.
+  const built = readBuiltVersion(root);
+  if (!latest || latest === built) return;
 
   process.stderr.write(
-    `\n[chwijung-mcp] 새 버전 v${latest} 발견 (현재 v${CURRENT}). 자동 업데이트 중...\n`,
+    `\n[chwijung-mcp] 새 버전 v${latest} 발견 (현재 v${built ?? "?"}). 자동 업데이트 중...\n`,
   );
 
   try {
-    // 비대화형(GIT_TERMINAL_PROMPT=0)·ff-only·타임아웃으로 자격증명/머지 프롬프트나
-    // 네트워크 정지에 의한 무기한 블록을 막는다. stdout 은 MCP 전용이므로 "pipe" 유지.
     process.stderr.write(`  git pull ...\n`);
-    execSync("git pull --ff-only", {
-      cwd: root,
-      stdio: "pipe",
-      timeout: 30_000,
-      env: { ...process.env, GIT_TERMINAL_PROMPT: "0" },
-    });
+    pullSource(root);
 
     // pull 후에도 latest 에 도달하지 못하면 이 체크아웃은 릴리스 채널을 추적하지 않는 것.
     // build/install 을 건너뛰어 시작 때마다 같은 재빌드를 반복하는 루프를 끊는다.
