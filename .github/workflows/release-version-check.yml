@@ -1,0 +1,18 @@
+name: Release Version Check
+
+on:
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  check_version:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # 태그 확인용
+      - run: bash .github/scripts/check-release-version.sh
