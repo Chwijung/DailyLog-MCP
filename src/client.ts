@@ -71,11 +71,12 @@ export class ChwijungClient {
   }
 
   /** POST /auth/refresh → 새 access_token (+ 회전된 refresh_token, 백엔드가 반환 시). */
-  async refresh(refreshToken: string): Promise<Record<string, any>> {
+  async refresh(refreshToken: string, timeoutMs?: number): Promise<Record<string, any>> {
     const res = await this.fetchFn(`${this.apiBase}/auth/refresh`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ refresh_token: refreshToken }),
+      ...(timeoutMs ? { signal: AbortSignal.timeout(timeoutMs) } : {}),
     });
     if (res.status === 401) throw new AuthError((await readDetail(res)) ?? "토큰 갱신에 실패했습니다", 401);
     if (!res.ok) throw new BackendError(`토큰 갱신 실패 (HTTP ${res.status})`, res.status);
@@ -126,6 +127,29 @@ export class ChwijungClient {
     }
     if (res.status === 400) throw new ValidationError((await readDetail(res)) ?? "입력값 검증에 실패했습니다", 400);
     if (!res.ok) throw new BackendError(`등록 실패 (HTTP ${res.status})`, res.status);
+    return res.json();
+  }
+
+  /** POST /ai-chat/events → { accepted }. hook에서 쓰므로 timeoutMs로 오래 붙잡지 않는다. */
+  async sendChatEvents(
+    accessToken: string,
+    events: unknown[],
+    timeoutMs?: number,
+  ): Promise<Record<string, any>> {
+    const res = await this.fetchFn(`${this.apiBase}/ai-chat/events`, {
+      method: "POST",
+      headers: { "content-type": "application/json", authorization: `Bearer ${accessToken}` },
+      body: JSON.stringify({ events }),
+      ...(timeoutMs ? { signal: AbortSignal.timeout(timeoutMs) } : {}),
+    });
+    if (res.status === 401) throw new AuthError((await readDetail(res)) ?? "인증이 만료되었습니다", 401);
+    if (res.status === 403) {
+      throw new BackendError((await readDetail(res)) ?? "권한이 없습니다 (학생 계정만 기록 가능)", 403);
+    }
+    if (res.status === 400 || res.status === 422) {
+      throw new ValidationError((await readDetail(res)) ?? "기록 형식이 올바르지 않습니다", res.status);
+    }
+    if (!res.ok) throw new BackendError(`기록 전송 실패 (HTTP ${res.status})`, res.status);
     return res.json();
   }
 }

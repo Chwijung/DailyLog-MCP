@@ -206,6 +206,32 @@ npx chwijung-mcp uninstall -y   # 확인 없이 바로 삭제 (--yes)
 
 ---
 
+## 💬 AI 대화 기록 (선택)
+
+데일리 로그와 별개로, Claude Code 대화를 취몽에 자동으로 남길 수 있어요. **직접 켜야만** 동작해요.
+
+```bash
+chwijung-mcp hooks install            # 지금 폴더에서 연 Claude Code 대화만
+chwijung-mcp hooks install --global   # 이 PC의 모든 Claude Code 대화
+chwijung-mcp hooks status             # 켜진 곳, 아직 못 보낸 기록 수
+chwijung-mcp hooks uninstall          # 끄기 (지금 폴더 + 전역)
+```
+
+| 보내는 것 | 보내지 않는 것 |
+|---|---|
+| 내가 입력한 프롬프트 원문 | 도구 입력·출력 (명령 실행 결과 등) |
+| AI가 쓴 도구 이름 (Bash, Edit …) | 파일 내용 |
+| 응답이 끝난 시각 | 전체 경로 (폴더 이름만 보냄) |
+
+- 프롬프트 안의 API 키·토큰·`password=…` 같은 값은 보내기 전에 `[MASKED]`로 가려요. 흔한 형식만 잡으니 **키를 프롬프트에 붙여 넣지 마세요.**
+- 기록은 `~/.chwijung/chat-spool/<계정>/`에 잠깐 쌓였다가 AI 응답이 끝날 때(Stop) 한 번에 보내요. 오프라인이면 남겨 두고 다음에 다시 보내요(계정마다 최대 2,000건, 본인만 읽을 수 있는 권한).
+- 학생 계정으로 로그인해 있을 때만 쌓아요. 한 PC에서 다른 계정으로 바꿔도, 이전 계정의 기록은 그 계정으로 다시 로그인할 때까지 보내지 않아요.
+- hook은 실패해도 작업을 막지 않아요. 켠 뒤에는 Claude Code를 다시 시작하세요.
+- `chwijung-mcp uninstall`도 이 hook을 함께 지워요.
+- Codex는 hook 명령(`chwijung-mcp hook --agent codex`)은 지원하지만 자동 설치는 아직 없어요.
+
+---
+
 ## 🛠️ 제공 도구
 
 | 도구 | 하는 일 |

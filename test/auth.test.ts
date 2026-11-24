@@ -121,6 +121,31 @@ describe("auth", () => {
     expect(await loadSession()).toBeNull();
   });
 
+  it("갱신 실패 사이에 다른 프로세스가 새 세션을 저장했으면 지우지 않고 그 세션을 쓴다", async () => {
+    await store({ access_token: "OLD", refresh_token: "R1", expires_at: Date.now() / 1000 - 10 });
+    // 같은 R1으로 먼저 갱신한 다른 hook이 새 세션을 저장한 뒤, 이쪽 갱신은 401
+    const fetchFn = (async () => {
+      await store({ access_token: "NEW", refresh_token: "R2", expires_at: Date.now() / 1000 + 3600 });
+      return new Response(JSON.stringify({ detail: "이미 쓴 토큰" }), { status: 401 });
+    }) as unknown as typeof fetch;
+
+    const session = await auth.getActiveSession(new ChwijungClient("http://test", fetchFn));
+
+    expect(session.access_token).toBe("NEW");
+    expect((await loadSession())?.refresh_token).toBe("R2");
+  });
+
+  it("다른 프로세스가 저장한 새 세션도 만료됐으면 지우지 않고 다음 호출에서 그 토큰으로 갱신하게 둔다", async () => {
+    await store({ access_token: "OLD", refresh_token: "R1", expires_at: Date.now() / 1000 - 10 });
+    const fetchFn = (async () => {
+      await store({ access_token: "NEW", refresh_token: "R2", expires_at: Date.now() / 1000 - 10 });
+      return new Response(JSON.stringify({}), { status: 401 });
+    }) as unknown as typeof fetch;
+
+    await expect(auth.getActiveSession(new ChwijungClient("http://test", fetchFn))).rejects.toThrow();
+    expect((await loadSession())?.refresh_token).toBe("R2");
+  });
+
   it("만료 + refresh_token 없음 → NotLoggedInError", async () => {
     await store({ access_token: "OLD", refresh_token: "", expires_at: Date.now() / 1000 - 10 });
     const fetchFn = mockFetch(() => ({ status: 500, body: {} }));
