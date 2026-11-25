@@ -48,7 +48,7 @@ https://github.com/user-attachments/assets/7a7c0dd9-b40d-46a4-9757-aa12af491c2f
 > `npx chwijung-mcp …` 로 쓸 수 있어요.
 
 ```bash
-git clone <…>/DailyLog-MCP.git   # 폴더명은 무엇이든 OK
+git clone -b main <…>/DailyLog-MCP.git   # main = 릴리스 버전. 폴더명은 무엇이든 OK
 cd DailyLog-MCP                   # 클론한 폴더로 이동
 npm install
 npm run build                    # build/ 가 생성됩니다
@@ -56,6 +56,10 @@ npm install -g .                 # 전역 명령어 'chwijung-mcp' 등록
 ```
 
 이제 `npx chwijung-mcp whoami` 가 **아무 폴더에서나** 동작하면 설치 성공입니다.
+
+> 새 릴리스가 나오면 MCP를 켤 때 자동으로 main 소스를 받아 업데이트합니다.
+> dev 로 설치했다면 이때 main 으로 옮겨집니다. 작업 브랜치이거나 dev 에 수정·올리지 않은 커밋이
+> 있으면 건드리지 않습니다. 개발 폴더에서 완전히 끄려면 `git config chwijung.autoUpdate false` 를 실행하세요.
 
 ### 2단계 — 내 AI 도구에 등록 (최초 1회)
 

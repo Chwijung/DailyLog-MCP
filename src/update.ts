@@ -16,6 +16,8 @@ import { constants } from "node:os";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { autoUpdateBlockedReason, syncSource } from "./update-source.js";
+
 const API_URL =
   "https://api.github.com/repos/Chwijung/DailyLog-MCP/releases/latest";
 
@@ -136,39 +138,6 @@ function acquireLock(root: string): (() => void) | null {
   return null;
 }
 
-/** 비대화형(GIT_TERMINAL_PROMPT=0)·ff-only·타임아웃으로 프롬프트나 네트워크 정지에 의한 무기한 블록을 막는다. */
-function runGitPull(root: string): void {
-  execSync("git pull --ff-only", {
-    cwd: root,
-    stdio: "pipe",
-    timeout: 30_000,
-    env: { ...process.env, GIT_TERMINAL_PROMPT: "0" },
-  });
-}
-
-/**
- * git pull. npm install 이 바꿔 놓은 package-lock.json 이 pull 을 막았고,
- * 바뀐 파일이 그것뿐이면 되돌리고 한 번 더 받는다.
- */
-function pullSource(root: string): void {
-  try {
-    runGitPull(root);
-  } catch (err) {
-    const stderr = String((err as { stderr?: unknown } | null)?.stderr ?? "");
-    if (!stderr.includes("package-lock.json")) throw err;
-    const changed = String(
-      execSync("git status --porcelain --untracked-files=no", {
-        cwd: root,
-        stdio: "pipe",
-        timeout: 30_000,
-      }),
-    ).trimEnd();
-    if (changed.slice(3) !== "package-lock.json") throw err;
-    execSync("git checkout HEAD -- package-lock.json", { cwd: root, stdio: "pipe", timeout: 30_000 });
-    runGitPull(root);
-  }
-}
-
 /** GitHub Releases API 에서 최신 릴리스를 가져온다. 실패하면 null. */
 async function fetchLatest(): Promise<Release | null> {
   try {
@@ -243,10 +212,16 @@ function runUpdate(root: string, release: Release): boolean {
   );
 
   try {
-    process.stderr.write(`  git pull ...\n`);
-    pullSource(root);
+    const blocked = autoUpdateBlockedReason(root);
+    if (blocked) {
+      process.stderr.write(`  개발용 저장소로 보여 건너뜁니다: ${blocked}\n\n`);
+      return false;
+    }
 
-    // pull 후에도 latest 에 도달하지 못하면 이 체크아웃은 릴리스 채널을 추적하지 않는 것.
+    process.stderr.write(`  main 소스 받기 ...\n`);
+    syncSource(root);
+
+    // 소스를 받은 뒤에도 latest 와 다르면(릴리스 발행 전 main 머지 등) 다음에 다시 확인한다.
     // build/install 을 건너뛰어 시작 때마다 같은 재빌드를 반복하는 루프를 끊는다.
     const installed = readInstalledVersion(root);
     if (installed !== latest) {
@@ -282,7 +257,7 @@ function runUpdate(root: string, release: Release): boolean {
       `[chwijung-mcp] 자동 업데이트 실패 (${msg})\n` +
         `  수동 업데이트:\n` +
         `    cd ${root}\n` +
-        `    git pull && npm install && npm run build && npm install -g .\n\n`,
+        `    git fetch origin main && git checkout main && git pull --ff-only origin main && npm install && npm run build && npm install -g .\n\n`,
     );
     return false; // 실패 시 현재 버전으로 그냥 계속 실행
   }
