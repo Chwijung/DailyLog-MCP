@@ -4,12 +4,19 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { autoUpdateBlockedReason, syncSource } from "../src/update-source.js";
 import { checkAndUpdate, exitCodeFromExecError, readInstalledVersion } from "../src/update.js";
 
 // checkAndUpdate가 호출하는 git/npm 명령을 실제로 실행하지 않도록 모킹.
 vi.mock("node:child_process", () => ({
   execSync: vi.fn(),
   execFileSync: vi.fn(),
+}));
+
+// 소스를 받는 git 동작은 update-source.test.ts 에서 실제 git 으로 확인한다.
+vi.mock("../src/update-source.js", () => ({
+  autoUpdateBlockedReason: vi.fn(),
+  syncSource: vi.fn(),
 }));
 
 let dir: string;
@@ -75,6 +82,8 @@ describe("exitCodeFromExecError", () => {
 describe("checkAndUpdate", () => {
   beforeEach(() => {
     vi.mocked(execSync).mockReset();
+    vi.mocked(autoUpdateBlockedReason).mockReset().mockReturnValue(null);
+    vi.mocked(syncSource).mockReset();
     delete process.env.CHWIJUNG_UPDATED;
     vi.spyOn(process.stderr, "write").mockReturnValue(true); // 진행 로그 침묵
   });
@@ -100,7 +109,6 @@ describe("checkAndUpdate", () => {
   const BEFORE = "2026-01-01T00:00:00Z";
   const AFTER = "2026-01-03T00:00:00Z";
   const UPDATE = [
-    "git pull --ff-only",
     "npm install --include=dev --no-audit --no-fund",
     "npm run build",
     "npm install -g .",
@@ -126,17 +134,6 @@ describe("checkAndUpdate", () => {
 
   function commands(): string[] {
     return vi.mocked(execSync).mock.calls.map((c) => String(c[0]));
-  }
-
-  /** 첫 pull은 package-lock.json 때문에 실패하고, git status는 주어진 결과를 낸다. */
-  function failFirstPull(status: string): void {
-    let pulls = 0;
-    vi.mocked(execSync).mockImplementation(((cmd: string) => {
-      if (cmd.startsWith("git pull") && pulls++ === 0) {
-        throw Object.assign(new Error("pull"), { stderr: Buffer.from("  package-lock.json") });
-      }
-      return Buffer.from(cmd.startsWith("git status") ? status : "");
-    }) as never);
   }
 
   it("릴리스 이후에 같은 버전으로 빌드했으면 업데이트하지 않음", async () => {
@@ -220,7 +217,8 @@ describe("checkAndUpdate", () => {
   it("소스가 릴리스보다 앞서 있으면 빌드를 건너뜀", async () => {
     setup("0.3.2", "0.3.3", "0.3.0");
     await checkAndUpdate(dir);
-    expect(commands()).toEqual(["git pull --ff-only"]);
+    expect(vi.mocked(syncSource)).toHaveBeenCalled();
+    expect(commands()).toEqual([]);
   });
 
   it("의존성 설치가 실패하면 빌드하지 않고, 한동안 다시 시도하지 않음", async () => {
@@ -230,7 +228,7 @@ describe("checkAndUpdate", () => {
       return Buffer.from("");
     }) as never);
     await checkAndUpdate(dir);
-    expect(commands()).toEqual(UPDATE.slice(0, 2));
+    expect(commands()).toEqual(UPDATE.slice(0, 1));
 
     vi.mocked(execSync).mockClear();
     await checkAndUpdate(dir);
@@ -245,38 +243,21 @@ describe("checkAndUpdate", () => {
     expect(commands()).toEqual(UPDATE);
   });
 
-  it.each([" M package-lock.json\n", "M  package-lock.json\n"])(
-    "바뀐 파일이 package-lock.json뿐이면 되돌리고 다시 받음 (%j)",
-    async (status) => {
-      setup("0.3.3", "0.3.3", "0.3.0");
-      failFirstPull(status);
-      await checkAndUpdate(dir);
-      expect(commands()).toEqual([
-        "git pull --ff-only",
-        "git status --porcelain --untracked-files=no",
-        "git checkout HEAD -- package-lock.json",
-        ...UPDATE,
-      ]);
-    },
-  );
-
-  it("다른 파일도 바뀌어 있으면 package-lock.json을 되돌리지 않음", async () => {
-    setup("0.3.3", "0.3.0", "0.3.0");
-    failFirstPull(" M package-lock.json\n M src/a.ts\n");
+  it("개발용 저장소면 소스를 받지 않음", async () => {
+    setup("0.3.3", "0.3.3", "0.3.0");
+    vi.mocked(autoUpdateBlockedReason).mockReturnValue("작업 브랜치");
     await checkAndUpdate(dir);
-    expect(commands()).toEqual([
-      "git pull --ff-only",
-      "git status --porcelain --untracked-files=no",
-    ]);
+    expect(vi.mocked(syncSource)).not.toHaveBeenCalled();
+    expect(commands()).toEqual([]);
   });
 
-  it("다른 이유로 pull이 실패하면 package-lock.json을 건드리지 않음", async () => {
+  it("소스를 받지 못하면 설치·빌드하지 않음", async () => {
     setup("0.3.3", "0.3.0", "0.3.0");
-    vi.mocked(execSync).mockImplementation(() => {
-      throw Object.assign(new Error("network"), { stderr: Buffer.from("could not resolve host") });
+    vi.mocked(syncSource).mockImplementation(() => {
+      throw new Error("network");
     });
     await checkAndUpdate(dir);
-    expect(commands()).toEqual(["git pull --ff-only"]);
+    expect(commands()).toEqual([]);
   });
 
   it("릴리스 조회 실패 시 업데이트하지 않음", async () => {
@@ -296,7 +277,7 @@ describe("checkAndUpdate", () => {
 
     // package.json(0.1.0) ≠ 9.9.9 → git pull만 시도하고 빌드/설치는 건너뜀
     const cmds = vi.mocked(execSync).mock.calls.map((c) => c[0]);
-    expect(cmds).toContain("git pull --ff-only");
+    expect(vi.mocked(syncSource)).toHaveBeenCalled();
     expect(cmds).not.toContain("npm run build");
     expect(cmds).not.toContain("npm install -g .");
   });
