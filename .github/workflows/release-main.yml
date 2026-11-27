@@ -10,7 +10,18 @@ permissions:
   contents: read
 
 jobs:
+  # 수강생 자동 업데이트는 새 릴리스를 보고 시작한다.
+  # main에 실제로 머지된 커밋을 먼저 검사하고, 실패하면 릴리스를 만들지 않는다.
+  test:
+    if: github.event.pull_request.merged == true
+    permissions:
+      contents: read
+    uses: ./.github/workflows/test.yml
+    with:
+      ref: ${{ github.event.pull_request.merge_commit_sha }}
+
   create_release:
+    needs: test
     # PR이 실제로 머지됐을 때만 실행 (단순 close는 제외)
     if: github.event.pull_request.merged == true
     permissions:
