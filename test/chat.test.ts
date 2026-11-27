@@ -7,6 +7,7 @@ import { buildEvent, MAX_CONTENT, maskSecrets } from "../src/chat/event.js";
 import { flushChat } from "../src/chat/flush.js";
 import { enqueue, MAX_SPOOL, readPending, userChatDir } from "../src/chat/spool.js";
 import { ChwijungClient } from "../src/client.js";
+import { addExcluded } from "../src/chat/scope.js";
 import { hookCommand } from "../src/hook.js";
 import { saveSession } from "../src/session.js";
 import { mockFetch } from "./helpers.js";
@@ -452,6 +453,30 @@ describe("hookCommand", () => {
     expect(code).toBe(0);
     expect(called).toBe(false);
     expect(await readPending(10, u1())).toHaveLength(1);
+  });
+
+  it("제외한 폴더(와 하위 폴더)에서 연 대화는 쌓지 않는다", async () => {
+    await loginAsStudent();
+    const project = join(dir, "private-project");
+    process.env.CHWIJUNG_CHAT_SCOPE_FILE = join(dir, "chat-scope.json");
+    try {
+      await addExcluded(project);
+      for (const cwd of [project, join(project, "sub")]) {
+        await hookCommand(
+          JSON.stringify({ session_id: "s", cwd, hook_event_name: "UserPromptSubmit", prompt: "비밀 프로젝트" }),
+          { agent: "claude" },
+        );
+      }
+      expect(await readPending(10, u1())).toHaveLength(0);
+
+      await hookCommand(
+        JSON.stringify({ session_id: "s", cwd: join(dir, "other"), hook_event_name: "UserPromptSubmit", prompt: "다른 폴더" }),
+        { agent: "claude" },
+      );
+      expect(await readPending(10, u1())).toHaveLength(1);
+    } finally {
+      delete process.env.CHWIJUNG_CHAT_SCOPE_FILE;
+    }
   });
 
   it("stop에서 쌓인 것을 함께 보낸다", async () => {

@@ -10,6 +10,7 @@
 
 import { type ChatAgent, buildEvent } from "./chat/event.js";
 import { flushChat } from "./chat/flush.js";
+import { excludedBy, loadScope } from "./chat/scope.js";
 import { enqueue, userChatDir } from "./chat/spool.js";
 import { ChwijungClient } from "./client.js";
 import { getBaseUrl } from "./config.js";
@@ -29,8 +30,12 @@ export interface HookOptions {
 
 export async function hookCommand(stdin: string, opts: HookOptions): Promise<number> {
   try {
-    const event = buildEvent(JSON.parse(stdin), opts.agent);
+    const input = JSON.parse(stdin);
+    const event = buildEvent(input, opts.agent);
     if (!event) return 0;
+    // `hooks exclude`로 뺀 폴더(와 하위 폴더)의 대화는 쌓지도 보내지도 않는다.
+    const cwd = typeof input?.cwd === "string" ? input.cwd : "";
+    if (cwd && excludedBy(cwd, await loadScope())) return 0;
     // 로그인한 학생 계정의 폴더에만 쌓는다. 로그아웃·학생 아님이면 남기지 않는다
     // (나중에 다른 계정으로 로그인했을 때 그 계정으로 보내지 않게). 네트워크 없이 세션 파일만 읽는다.
     const session = await loadSession();

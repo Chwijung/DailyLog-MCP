@@ -19,7 +19,8 @@ import { homedir } from "node:os";
 import { dirname, join, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { claudeSettingsPath, uninstallClaudeHooks } from "./hooks-install.js";
+import { loadScope, scopeFile } from "./chat/scope.js";
+import { claudeSettingsPath, uninstallClaudeHooks, uninstallFolderHooks } from "./hooks-install.js";
 import { clearSession } from "./session.js";
 
 /** npm 전역 패키지명 / MCP 서버 등록 이름 */
@@ -144,14 +145,21 @@ export async function uninstall(opts: UninstallOptions = {}): Promise<void> {
       `   ※ Codex CLI가 없으면 ~/.codex/config.toml 의 [mcp_servers.${SERVER}] 블록을 직접 삭제하세요.\n`,
   );
 
-  // 1-1) AI 대화 기록 hook 제거 (현재 폴더 + 전역 Claude Code 설정)
-  for (const scope of ["project", "global"] as const) {
-    const path = claudeSettingsPath(scope, cwd, home);
+  // 1-1) AI 대화 기록 hook 제거 (현재 폴더 + hook을 켰던 폴더들 + 전역 Claude Code 설정)
+  //      켰던 폴더 목록은 ~/.chwijung 에 있으므로 2) 에서 지우기 전에 읽는다.
+  const { projects } = await loadScope(scopeFile(home));
+  for (const folder of [cwd, ...projects]) {
     try {
-      if (await uninstallClaudeHooks(path)) log(`   - ${path}: AI 대화 기록 hook 제거`);
+      for (const path of await uninstallFolderHooks(folder)) log(`   - ${path}: AI 대화 기록 hook 제거`);
     } catch {
-      // 개별 파일 실패는 무시
+      // 개별 폴더 실패는 무시
     }
+  }
+  try {
+    const path = claudeSettingsPath("global", cwd, home);
+    if (await uninstallClaudeHooks(path)) log(`   - ${path}: AI 대화 기록 hook 제거`);
+  } catch {
+    // 실패는 무시
   }
 
   // 2) 토큰 캐시(~/.chwijung) 제거 — 문서상 고정 경로만 삭제한다.

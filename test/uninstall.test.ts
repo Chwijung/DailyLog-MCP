@@ -86,6 +86,26 @@ describe("uninstall", () => {
     expect(JSON.parse(readFileSync(cfg, "utf-8")).mcpServers.chwijung).toBeUndefined();
   });
 
+  it("다른 폴더에 켜 둔 대화 기록 hook(개인·예전 위치)까지 지운다", async () => {
+    process.env.CHWIJUNG_SESSION_FILE = join(dir, ".chwijung", "session.json");
+    const cmd = '"C:/node.exe" "E:/x/cli.js" hook --agent claude --owner chwijung-mcp';
+    const hookSettings = JSON.stringify({ hooks: { Stop: [{ hooks: [{ type: "command", command: cmd }] }] } });
+    const project = join(dir, "project");
+    mkdirSync(join(project, ".claude"), { recursive: true });
+    writeFileSync(join(project, ".claude", "settings.local.json"), hookSettings, "utf-8");
+    writeFileSync(join(project, ".claude", "settings.json"), hookSettings, "utf-8");
+    mkdirSync(join(dir, ".chwijung"), { recursive: true });
+    writeFileSync(join(dir, ".chwijung", "chat-scope.json"), JSON.stringify({ excluded: [], projects: [project] }));
+    const cwd = join(dir, "elsewhere");
+    mkdirSync(cwd, { recursive: true });
+
+    await uninstall({ run: () => {}, repoRoot: join(dir, "repo"), cwd, home: dir, jsonConfigPaths: [], log: () => {} });
+
+    for (const f of ["settings.local.json", "settings.json"]) {
+      expect(readFileSync(join(project, ".claude", f), "utf-8")).not.toContain("hook --agent");
+    }
+  });
+
   it("cwd가 레포 내부면 레포 폴더를 삭제하지 않음", async () => {
     process.env.CHWIJUNG_SESSION_FILE = join(dir, ".chwijung", "session.json");
     const repoRoot = join(dir, "repo");
