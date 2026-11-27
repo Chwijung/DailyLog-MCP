@@ -33,16 +33,20 @@ export async function hookCommand(stdin: string, opts: HookOptions): Promise<num
     const input = JSON.parse(stdin);
     const event = buildEvent(input, opts.agent);
     if (!event) return 0;
-    // `hooks exclude`로 뺀 폴더(와 하위 폴더)의 대화는 쌓지도 보내지도 않는다.
-    const cwd = typeof input?.cwd === "string" ? input.cwd : "";
-    if (cwd && excludedBy(cwd, await loadScope())) return 0;
+    // `hooks exclude`로 뺀 폴더(와 하위 폴더)의 대화는 쌓지 않는다. 작업 폴더(cwd)는 /cd·worktree로
+    // 바뀔 수 있으므로 세션을 시작한 폴더(CLAUDE_PROJECT_DIR)도 함께 본다.
+    const scope = await loadScope();
+    const excluded = [input?.cwd, process.env.CLAUDE_PROJECT_DIR].some(
+      (p) => typeof p === "string" && p !== "" && excludedBy(p, scope) !== null,
+    );
     // 로그인한 학생 계정의 폴더에만 쌓는다. 로그아웃·학생 아님이면 남기지 않는다
     // (나중에 다른 계정으로 로그인했을 때 그 계정으로 보내지 않게). 네트워크 없이 세션 파일만 읽는다.
     const session = await loadSession();
     if (session?.user.role !== "student") return 0;
     const dir = userChatDir(session.user.id, opts.dir);
     if (!dir) return 0;
-    await enqueue(event, dir);
+    if (!excluded) await enqueue(event, dir);
+    // 제외 폴더에서 응답이 끝나도, 다른 폴더에서 쌓인 기록은 보낸다.
     if (event.type === "stop") {
       const client = opts.client ?? new ChwijungClient(getBaseUrl());
       await flushChat(client, { dir: opts.dir, timeoutMs: SEND_TIMEOUT_MS, budgetMs: FLUSH_BUDGET_MS });

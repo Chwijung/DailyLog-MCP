@@ -246,8 +246,9 @@ export async function hooksCommand(
   }
 
   if (sub === "uninstall") {
-    const onlyGlobal = has("--global");
-    const onlyProject = has("--project");
+    // 둘 다 주면 둘 다 끈다 (기본 동작과 같음).
+    const onlyGlobal = has("--global") && !has("--project");
+    const onlyProject = has("--project") && !has("--global");
     const all = has("--all");
     const scope = await loadScope(scopePath);
     const folders = all ? [cwd, ...scope.projects] : onlyGlobal ? [] : [cwd];

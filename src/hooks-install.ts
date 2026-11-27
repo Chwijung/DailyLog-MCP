@@ -38,7 +38,7 @@ type Settings = Record<string, unknown> & { hooks?: Record<string, HookGroup[]> 
 
 /**
  * - local: `<폴더>/.claude/settings.local.json` — 폴더 단위 설치 위치. 개인 설정 파일이라 git에 올리지 않는다.
- * - project: `<폴더>/.claude/settings.json` — 0.3.x까지 쓰던 폴더 단위 위치. 팀이 커밋하는 파일이라
+ * - project: `<폴더>/.claude/settings.json` — v0.3.2까지 쓰던 폴더 단위 위치. 팀이 커밋하는 파일이라
  *   clone한 팀원에게도 hook이 퍼질 수 있어 더는 쓰지 않는다. 남은 항목을 찾아 지우는 데만 쓴다.
  * - global: `~/.claude/settings.json`
  */

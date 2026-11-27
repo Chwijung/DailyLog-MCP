@@ -218,6 +218,9 @@ function runUpdate(root: string, release: Release): boolean {
       return false;
     }
 
+    // 소스 받기 실패(네트워크·로컬 main 갈라짐 등)도 시도로 남겨, MCP를 켤 때마다 다시 하지 않는다.
+    writeRecord(root, ".update-attempt", { version: latest, at: Date.now() });
+
     process.stderr.write(`  main 소스 받기 ...\n`);
     syncSource(root);
 
@@ -232,8 +235,6 @@ function runUpdate(root: string, release: Release): boolean {
       );
       return false;
     }
-
-    writeRecord(root, ".update-attempt", { version: latest, at: Date.now() });
 
     // 새 릴리스가 의존성을 추가했을 수 있으므로 빌드보다 먼저 설치한다.
     process.stderr.write(`  npm install ...\n`);

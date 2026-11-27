@@ -325,6 +325,16 @@ describe("hooksCommand", () => {
     expect(readFileSync(settingsAt(home), "utf-8")).toContain("hook --agent");
   });
 
+  it("uninstall --project --global을 함께 주면 둘 다 끈다", async () => {
+    await student();
+    const home = join(dir, "home");
+    await hooksCommand({ log }, ["install", "-y"], { cwd: dir, home, command: CMD });
+    await hooksCommand({ log }, ["install", "--global", "-y"], { cwd: dir, home, command: CMD });
+    await hooksCommand({ log }, ["uninstall", "--project", "--global"], { cwd: dir, home });
+    expect(readFileSync(localAt(dir), "utf-8")).not.toContain("hook --agent");
+    expect(readFileSync(settingsAt(home), "utf-8")).not.toContain("hook --agent");
+  });
+
   it("uninstall --all은 다른 폴더에 켜 둔 hook까지 끈다", async () => {
     await student();
     const home = join(dir, "home");
