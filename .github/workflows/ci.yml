@@ -1,0 +1,25 @@
+name: CI
+
+# PR 이 녹색이어도 합친 결과가 깨질 수 있다.
+# 그래서 dev 에 머지된 결과(push)와 dev→main PR 도 같은 검사를 돌린다.
+# main 은 머지되는 순간 새로 설치하는 수강생이 받으므로, dev→main PR 검사가 가장 중요하다.
+on:
+  pull_request:
+    branches: [dev, main]
+    paths-ignore:
+      - '**/*.md'
+  push:
+    branches: [dev]
+    paths-ignore:
+      - '**/*.md'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  ci:
+    uses: ./.github/workflows/test.yml

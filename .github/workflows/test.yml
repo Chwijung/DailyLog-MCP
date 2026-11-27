@@ -1,0 +1,62 @@
+name: Test
+
+# 공용 검사. PR CI, dev 머지 결과, 릴리스가 모두 같은 검사를 쓴다.
+# 이 MCP 는 수강생 PC(Windows·macOS, Node 버전 제각각)에서 돌기 때문에 OS·Node 조합으로 검사하고,
+# 수강생이 하는 설치(npm run build → npm install -g .)와 MCP 연결까지 재현한다.
+on:
+  workflow_call:
+    inputs:
+      ref:
+        description: 검사할 커밋. 비우면 이벤트의 기본 커밋을 쓴다.
+        type: string
+        default: ''
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: ${{ matrix.os }} / Node ${{ matrix.node }}
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        # Windows 기본 셸(pwsh)은 여러 줄 중 앞 명령의 실패를 놓치므로 모든 OS에서 bash를 쓴다.
+        shell: bash
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: windows-latest, node: '20' }
+          - { os: windows-latest, node: '24' }
+          - { os: macos-latest, node: '24' }
+          - { os: ubuntu-latest, node: '20' }
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
+
+      - name: Set up Node ${{ matrix.node }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      # tsc 가 타입 검사를 겸한다.
+      - name: Build
+        run: npm run build
+
+      - name: Vitest
+        run: npm test
+
+      - name: MCP smoke (build/cli.js)
+        run: node scripts/smoke-mcp.mjs
+
+      # 수강생 설치와 같은 방식. Windows junction·bin 등록 문제를 여기서 잡는다.
+      - name: Global install smoke (chwijung-mcp)
+        run: |
+          npm install -g .
+          node scripts/smoke-mcp.mjs chwijung-mcp serve
