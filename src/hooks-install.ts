@@ -1,5 +1,5 @@
 /**
- * Claude Code settings.json 에 대화 기록 hook을 넣고 빼기.
+ * Claude Code 설정 파일(settings.local.json / settings.json)에 대화 기록 hook을 넣고 빼기.
  *
  * - 다른 설정과 다른 hook은 건드리지 않는다. 쓰기 전에 `.bak` 백업.
  * - 우리 항목은 명령 끝의 소유 표식(`… hook --agent claude --owner chwijung-mcp`)으로 찾는다.
@@ -9,10 +9,14 @@
  * - Codex는 hook 설정 형식이 버전마다 달라 아직 자동 설치하지 않는다 (hook 명령 자체는 --agent codex 지원).
  */
 
+import { execFile } from "node:child_process";
 import { promises as fs } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { promisify } from "node:util";
+
+const execFileAsync = promisify(execFile);
 
 import type { ChatAgent } from "./chat/event.js";
 
@@ -32,8 +36,66 @@ interface HookGroup {
 }
 type Settings = Record<string, unknown> & { hooks?: Record<string, HookGroup[]> };
 
-export function claudeSettingsPath(scope: "global" | "project", cwd = process.cwd(), home = homedir()): string {
-  return scope === "global" ? join(home, ".claude", "settings.json") : join(cwd, ".claude", "settings.json");
+/**
+ * - local: `<폴더>/.claude/settings.local.json` — 폴더 단위 설치 위치. 개인 설정 파일이라 git에 올리지 않는다.
+ * - project: `<폴더>/.claude/settings.json` — v0.3.2까지 쓰던 폴더 단위 위치. 팀이 커밋하는 파일이라
+ *   clone한 팀원에게도 hook이 퍼질 수 있어 더는 쓰지 않는다. 남은 항목을 찾아 지우는 데만 쓴다.
+ * - global: `~/.claude/settings.json`
+ */
+export type SettingsScope = "global" | "project" | "local";
+
+export function claudeSettingsPath(scope: SettingsScope, cwd = process.cwd(), home = homedir()): string {
+  if (scope === "global") return join(home, ".claude", "settings.json");
+  return join(cwd, ".claude", scope === "local" ? "settings.local.json" : "settings.json");
+}
+
+/** 개인 설정 파일과, 고칠 때 남기는 백업(`.bak`, 예전 hook이 들어 있음) */
+export const LOCAL_IGNORE_PATTERNS = ["**/.claude/settings.local.json", "**/.claude/settings.local.json.bak"];
+
+/**
+ * file(과 그 `.bak`)이 git 저장소 안에 있고 아직 무시되지 않으면 그 저장소의 `.git/info/exclude`에 넣는다.
+ * (Claude Code는 자기가 처음 만든 settings.local.json만 무시 목록에 넣는다. 우리가 만든 파일과 백업은 직접 처리.)
+ * `.git/info/exclude`는 이 PC에만 있고 커밋되지 않는다.
+ * 반환: "ignored"(이미 무시됨) | "added"(추가함) | "not-git"(저장소 아님) | "failed"(이미 커밋된 파일 등)
+ */
+export async function ensureGitIgnored(file: string): Promise<"ignored" | "added" | "not-git" | "failed"> {
+  const cwd = dirname(file);
+  const git = async (...args: string[]): Promise<string> =>
+    (await execFileAsync("git", args, { cwd, windowsHide: true })).stdout.trim();
+  const ignored = async (p: string): Promise<boolean> => {
+    try {
+      await git("check-ignore", "-q", p); // 0 = 무시됨, 1 = 아님 (없는 파일도 판정 가능)
+      return true;
+    } catch {
+      return false;
+    }
+  };
+  try {
+    await git("rev-parse", "--is-inside-work-tree");
+  } catch {
+    return "not-git";
+  }
+  try {
+    const targets = [file, `${file}.bak`];
+    const todo: string[] = [];
+    for (let i = 0; i < targets.length; i++) if (!(await ignored(targets[i]))) todo.push(LOCAL_IGNORE_PATTERNS[i]);
+    if (todo.length === 0) return "ignored";
+
+    const exclude = resolve(cwd, await git("rev-parse", "--git-path", "info/exclude"));
+    await fs.mkdir(dirname(exclude), { recursive: true });
+    let prev = "";
+    try {
+      prev = await fs.readFile(exclude, "utf-8");
+    } catch {
+      // 없으면 새로 만든다
+    }
+    const sep = prev && !prev.endsWith("\n") ? "\n" : "";
+    await fs.writeFile(exclude, `${prev}${sep}${todo.join("\n")}\n`, "utf-8");
+    for (const t of targets) if (!(await ignored(t))) return "failed"; // 이미 커밋된 파일이면 무시되지 않음
+    return "added";
+  } catch {
+    return "failed";
+  }
 }
 
 /** build/hooks-install.js 기준 build/cli.js */
@@ -142,6 +204,16 @@ export async function uninstallClaudeHooks(path: string): Promise<boolean> {
   if (Object.keys(hooks).length === 0) delete next.hooks;
   await writeSettings(path, next, raw);
   return true;
+}
+
+/** 폴더 하나의 개인 설정·예전 위치에서 우리 hook을 지운다. 지운 파일 경로 목록. */
+export async function uninstallFolderHooks(folder: string): Promise<string[]> {
+  const removed: string[] = [];
+  for (const scope of ["local", "project"] as const) {
+    const path = claudeSettingsPath(scope, folder);
+    if (await uninstallClaudeHooks(path)) removed.push(path);
+  }
+  return removed;
 }
 
 /** 우리 hook이 걸린 이벤트 목록 */

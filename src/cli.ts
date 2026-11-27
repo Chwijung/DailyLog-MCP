@@ -8,9 +8,10 @@
  *   chwijung-mcp logout       캐시된 세션 삭제
  *   chwijung-mcp whoami       현재 로그인 상태 출력
  *   chwijung-mcp uninstall [-y] 전역 명령·토큰·MCP 설정·레포 폴더를 한 번에 삭제
- *   chwijung-mcp hooks install [--global] [-y]  AI 대화 기록 hook 켜기 (기본: 현재 폴더만)
- *   chwijung-mcp hooks uninstall               AI 대화 기록 hook 끄기 (현재 폴더 + 전역)
- *   chwijung-mcp hooks status                  hook 설치 위치·보내지 못한 기록 수
+ *   chwijung-mcp hooks install [--global] [-y]  AI 대화 기록 hook 켜기 (기본: 현재 폴더의 settings.local.json)
+ *   chwijung-mcp hooks uninstall [--project|--global|--all]  끄기 (기본: 현재 폴더 + 전역)
+ *   chwijung-mcp hooks exclude | include       현재 폴더(와 하위 폴더)를 수집에서 빼기/되돌리기
+ *   chwijung-mcp hooks status                  hook 설치 위치·제외 폴더·보내지 못한 기록 수
  *   chwijung-mcp hook --agent <claude|codex>   (AI 도구가 실행) stdin hook 입력을 기록
  *
  * 보안: 비밀번호는 AI/LLM이 아니라 사람이 터미널에 직접 입력한다(에코 숨김).
@@ -29,11 +30,23 @@ import { countPending, userChatDir } from "./chat/spool.js";
 import { hookCommand, readStdin } from "./hook.js";
 import {
   claudeSettingsPath,
+  ensureGitIgnored,
   hookCommandLine,
   installClaudeHooks,
   listInstalledHooks,
   uninstallClaudeHooks,
+  uninstallFolderHooks,
 } from "./hooks-install.js";
+import {
+  addExcluded,
+  addProject,
+  excludedBy,
+  loadScope,
+  removeExcluded,
+  removeProjects,
+  samePath,
+  scopeFile,
+} from "./chat/scope.js";
 import { clearSession, isAccessValid, loadSession } from "./session.js";
 import { runStdioServer } from "./serve.js";
 import { type UninstallOptions, uninstall } from "./uninstall.js";
@@ -172,12 +185,16 @@ export async function hooksCommand(
   deps: HooksDeps = {},
 ): Promise<number> {
   const sub = args[0];
-  const global = args.includes("--global");
-  const yes = args.includes("-y") || args.includes("--yes");
-  const project = claudeSettingsPath("project", deps.cwd, deps.home);
-  const globalPath = claudeSettingsPath("global", deps.cwd, deps.home);
+  const has = (flag: string): boolean => args.includes(flag);
+  const yes = has("-y") || has("--yes");
+  const cwd = resolve(deps.cwd ?? process.cwd());
+  const local = claudeSettingsPath("local", cwd, deps.home);
+  const legacy = claudeSettingsPath("project", cwd, deps.home);
+  const globalPath = claudeSettingsPath("global", cwd, deps.home);
+  const scopePath = scopeFile(deps.home);
 
   if (sub === "install") {
+    const global = has("--global");
     const session = await loadSession();
     if (!session) {
       io.log("먼저 로그인하세요: chwijung-mcp connect <코드> 또는 chwijung-mcp login");
@@ -186,8 +203,9 @@ export async function hooksCommand(
     io.log(CHAT_CONSENT_NOTICE);
     io.log(
       global
-        ? "\n범위: 이 PC의 모든 Claude Code 대화"
-        : `\n범위: 이 폴더에서 연 Claude Code 대화만 (${deps.cwd ?? process.cwd()})`,
+        ? "\n범위: 이 PC의 모든 Claude Code 대화 (빼고 싶은 폴더는 그 폴더에서 chwijung-mcp hooks exclude)"
+        : `\n범위: 이 폴더에서 연 Claude Code 대화만 (${cwd})\n` +
+            "  (macOS·Linux에서 이 폴더가 git 저장소 맨 위 폴더면 하위 폴더에서 연 대화도 포함됩니다)",
     );
     if (!yes) {
       const ok = await (deps.confirm ?? realConfirmChat)();
@@ -196,10 +214,29 @@ export async function hooksCommand(
         return 0;
       }
     }
-    const path = global ? globalPath : project;
+    const path = global ? globalPath : local;
     try {
       const state = await installClaudeHooks(path, deps.command ?? hookCommandLine("claude"));
       io.log(state === "already" ? `이미 켜져 있습니다: ${path}` : `켰습니다: ${path}`);
+      if (!global) {
+        await addProject(cwd, scopePath);
+        if (await uninstallClaudeHooks(legacy)) {
+          io.log(`예전 위치의 hook을 지웠습니다: ${legacy} (이 파일을 커밋했다면 바뀐 내용도 커밋하세요)`);
+        }
+        const ignore = await ensureGitIgnored(path);
+        if (ignore === "added") io.log("git에 올라가지 않게 .git/info/exclude 에 추가했습니다 (이 PC에만 적용).");
+        if (ignore === "failed") {
+          io.log(`주의: ${path} 를 git 무시 목록에 넣지 못했습니다. 커밋하지 마세요 (.gitignore에 추가 권장).`);
+        }
+      }
+      const scope = await loadScope(scopePath);
+      const ex = excludedBy(cwd, scope);
+      if (ex && !global && samePath(ex, cwd)) {
+        await removeExcluded(ex, scopePath);
+        io.log("이 폴더를 수집 제외 목록에서 뺐습니다.");
+      } else if (ex) {
+        io.log(`참고: 이 폴더는 수집 제외 중입니다 (${ex}). 다시 받으려면 그 폴더에서 chwijung-mcp hooks include`);
+      }
       io.log("Claude Code를 다시 시작하면 적용됩니다. 확인: chwijung-mcp hooks status");
       return 0;
     } catch (err) {
@@ -209,29 +246,82 @@ export async function hooksCommand(
   }
 
   if (sub === "uninstall") {
+    // 둘 다 주면 둘 다 끈다 (기본 동작과 같음).
+    const onlyGlobal = has("--global") && !has("--project");
+    const onlyProject = has("--project") && !has("--global");
+    const all = has("--all");
+    const scope = await loadScope(scopePath);
+    const folders = all ? [cwd, ...scope.projects] : onlyGlobal ? [] : [cwd];
     const removed: string[] = [];
-    for (const path of [project, globalPath]) {
-      if (await uninstallClaudeHooks(path)) removed.push(path);
+    try {
+      for (const folder of folders) removed.push(...(await uninstallFolderHooks(folder)));
+      if (all || !onlyProject) {
+        if (await uninstallClaudeHooks(globalPath)) removed.push(globalPath);
+      }
+      if (folders.length > 0) await removeProjects(folders, scopePath);
+    } catch (err) {
+      io.log(`끄기 실패: ${err instanceof Error ? err.message : String(err)}`);
+      return 1;
     }
-    io.log(removed.length ? `껐습니다: ${removed.join(", ")}` : "켜져 있는 곳이 없습니다.");
+    io.log(removed.length ? `껐습니다:\n  ${removed.join("\n  ")}` : "켜져 있는 곳이 없습니다.");
+    if (!all) {
+      const others = scope.projects.filter((p) => !samePath(p, cwd));
+      if (others.length > 0) {
+        io.log(`다른 폴더에도 켜져 있을 수 있습니다 (${others.length}곳). 모두 끄려면: chwijung-mcp hooks uninstall --all`);
+      }
+    }
     return 0;
   }
 
+  if (sub === "exclude" || sub === "include") {
+    try {
+      if (sub === "exclude") {
+        await addExcluded(cwd, scopePath);
+        io.log(`이 폴더(와 하위 폴더)에서 연 대화는 수집하지 않습니다: ${cwd}`);
+        io.log("다시 받으려면: chwijung-mcp hooks include");
+      } else {
+        const scope = await loadScope(scopePath);
+        if (!scope.excluded.some((p) => samePath(p, cwd))) {
+          const ex = excludedBy(cwd, scope);
+          io.log(ex ? `상위 폴더가 제외되어 있습니다: ${ex} — 그 폴더에서 include 하세요.` : "이 폴더는 제외되어 있지 않습니다.");
+          return 0;
+        }
+        await removeExcluded(cwd, scopePath);
+        io.log(`이 폴더를 수집 제외 목록에서 뺐습니다: ${cwd}`);
+      }
+      return 0;
+    } catch (err) {
+      io.log(`실패: ${err instanceof Error ? err.message : String(err)}`);
+      return 1;
+    }
+  }
+
   if (sub === "status") {
-    for (const [label, path] of [
-      ["이 폴더", project],
-      ["전역", globalPath],
-    ] as const) {
+    const show = async (label: string, path: string): Promise<void> => {
       const events = await listInstalledHooks(path);
       io.log(`${label}: ${events.length ? `켜짐 (${events.join(", ")})` : "꺼짐"} — ${path}`);
+    };
+    await show("이 폴더", local);
+    if ((await listInstalledHooks(legacy)).length > 0) {
+      io.log(`이 폴더(예전 위치): 켜짐 — ${legacy}`);
+      io.log("  팀이 커밋하는 파일이라 팀원에게도 퍼질 수 있습니다. chwijung-mcp hooks install 로 옮기세요.");
     }
+    await show("전역", globalPath);
+    const scope = await loadScope(scopePath);
+    const others = scope.projects.filter((p) => !samePath(p, cwd));
+    for (const p of others) io.log(`다른 폴더: ${p}`);
+    const ex = excludedBy(cwd, scope);
+    if (ex) io.log(`이 폴더는 수집 안 함 (제외: ${ex})`);
+    for (const p of scope.excluded.filter((x) => x !== ex)) io.log(`수집 안 함: ${p}`);
     const dir = userChatDir((await loadSession())?.user.id);
     const pending = dir ? await countPending(dir) : 0;
     io.log(`보내지 못한 기록: ${pending}건 (다음 응답이 끝날 때 다시 보냅니다)`);
     return 0;
   }
 
-  io.log("사용법: chwijung-mcp hooks <install [--global] [-y] | uninstall | status>");
+  io.log(
+    "사용법: chwijung-mcp hooks <install [--global] [-y] | uninstall [--project | --global | --all] | exclude | include | status>",
+  );
   return 2;
 }
 
@@ -360,7 +450,7 @@ async function main(): Promise<number> {
     default:
       process.stderr.write(
         `알 수 없는 명령: ${cmd}\n` +
-          `사용법: chwijung-mcp [serve|login|connect <코드>|logout|whoami|uninstall [-y]|hooks <install|uninstall|status>]\n`,
+          `사용법: chwijung-mcp [serve|login|connect <코드>|logout|whoami|uninstall [-y]|hooks <install|uninstall|exclude|include|status>]\n`,
       );
       return 2;
   }
