@@ -1,4 +1,5 @@
-import { existsSync, mkdtempSync, rmSync } from "node:fs";
+import { execFileSync } from "node:child_process";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -196,6 +197,7 @@ describe("cli", () => {
 describe("hooksCommand", () => {
   const CMD = '"C:/node.exe" "E:/DailyLog-MCP/build/cli.js" hook --agent claude';
   const settingsAt = (base: string): string => join(base, ".claude", "settings.json");
+  const localAt = (base: string): string => join(base, ".claude", "settings.local.json");
 
   async function student(): Promise<void> {
     await saveSession({
@@ -227,11 +229,125 @@ describe("hooksCommand", () => {
     expect(existsSync(settingsAt(dir))).toBe(false);
   });
 
+  it("기본은 현재 폴더의 개인 설정 파일(settings.local.json)에 설치한다", async () => {
+    await student();
+    const home = join(dir, "home");
+    await hooksCommand({ log }, ["install", "-y"], { cwd: dir, home, command: CMD });
+    expect(existsSync(localAt(dir))).toBe(true);
+    expect(existsSync(settingsAt(dir))).toBe(false);
+  });
+
+  it("예전 위치(settings.json)의 hook은 설치할 때 옮기고 다른 hook은 남긴다", async () => {
+    await student();
+    const home = join(dir, "home");
+    mkdirSync(join(dir, ".claude"), { recursive: true });
+    writeFileSync(
+      settingsAt(dir),
+      JSON.stringify({
+        hooks: {
+          Stop: [{ hooks: [{ type: "command", command: CMD }] }, { hooks: [{ type: "command", command: "say done" }] }],
+        },
+      }),
+    );
+    logs.length = 0;
+    await hooksCommand({ log }, ["status"], { cwd: dir, home });
+    expect(logs.join("\n")).toContain("예전 위치");
+
+    await hooksCommand({ log }, ["install", "-y"], { cwd: dir, home, command: CMD });
+    const legacy = JSON.parse(readFileSync(settingsAt(dir), "utf-8"));
+    expect(legacy.hooks.Stop.flatMap((g: any) => g.hooks.map((h: any) => h.command))).toEqual(["say done"]);
+    expect(existsSync(localAt(dir))).toBe(true);
+  });
+
+  it("git 저장소 안이면 개인 설정 파일을 git 무시 목록에 넣는다", async () => {
+    await student();
+    const repo = join(dir, "repo");
+    mkdirSync(repo);
+    // 이 PC의 전역 git 설정(전역 무시 목록)이 끼어들지 않게 격리
+    const saved = { g: process.env.GIT_CONFIG_GLOBAL, x: process.env.XDG_CONFIG_HOME };
+    writeFileSync(join(dir, "gitconfig"), "");
+    process.env.GIT_CONFIG_GLOBAL = join(dir, "gitconfig");
+    process.env.XDG_CONFIG_HOME = join(dir, "xdg");
+    try {
+      execFileSync("git", ["init", "-q"], { cwd: repo });
+      await hooksCommand({ log }, ["install", "-y"], { cwd: repo, home: join(dir, "home"), command: CMD });
+      // check-ignore가 0으로 끝나면 무시됨
+      execFileSync("git", ["check-ignore", "-q", localAt(repo)], { cwd: repo });
+      execFileSync("git", ["check-ignore", "-q", `${localAt(repo)}.bak`], { cwd: repo }); // 백업도 무시
+      expect(readFileSync(join(repo, ".git", "info", "exclude"), "utf-8")).toContain(".claude/settings.local.json");
+      // 끈 뒤에도 git에 올라갈 파일이 없다
+      await hooksCommand({ log }, ["uninstall", "--project"], { cwd: repo, home: join(dir, "home") });
+      expect(execFileSync("git", ["status", "--porcelain"], { cwd: repo }).toString()).toBe("");
+    } finally {
+      for (const [k, v] of [["GIT_CONFIG_GLOBAL", saved.g], ["XDG_CONFIG_HOME", saved.x]] as const) {
+        if (v === undefined) delete process.env[k];
+        else process.env[k] = v;
+      }
+    }
+  });
+
+  it("exclude한 폴더는 status에 보이고, include로 되돌린다", async () => {
+    await student();
+    const home = join(dir, "home");
+    const scope = join(home, ".chwijung", "chat-scope.json");
+    await hooksCommand({ log }, ["exclude"], { cwd: dir, home });
+    expect(JSON.parse(readFileSync(scope, "utf-8")).excluded).toHaveLength(1);
+
+    logs.length = 0;
+    await hooksCommand({ log }, ["status"], { cwd: join(dir), home });
+    expect(logs.join("\n")).toContain("수집 안 함");
+
+    await hooksCommand({ log }, ["include"], { cwd: dir, home });
+    expect(JSON.parse(readFileSync(scope, "utf-8")).excluded).toHaveLength(0);
+  });
+
+  it("exclude한 폴더에서 install하면 제외를 풀어 준다", async () => {
+    await student();
+    const home = join(dir, "home");
+    await hooksCommand({ log }, ["exclude"], { cwd: dir, home });
+    await hooksCommand({ log }, ["install", "-y"], { cwd: dir, home, command: CMD });
+    expect(JSON.parse(readFileSync(join(home, ".chwijung", "chat-scope.json"), "utf-8")).excluded).toHaveLength(0);
+  });
+
+  it("uninstall --global은 전역만, --project는 이 폴더만 끈다", async () => {
+    await student();
+    const home = join(dir, "home");
+    await hooksCommand({ log }, ["install", "-y"], { cwd: dir, home, command: CMD });
+    await hooksCommand({ log }, ["install", "--global", "-y"], { cwd: dir, home, command: CMD });
+
+    await hooksCommand({ log }, ["uninstall", "--global"], { cwd: dir, home });
+    expect(readFileSync(settingsAt(home), "utf-8")).not.toContain("hook --agent");
+    expect(readFileSync(localAt(dir), "utf-8")).toContain("hook --agent");
+
+    await hooksCommand({ log }, ["install", "--global", "-y"], { cwd: dir, home, command: CMD });
+    await hooksCommand({ log }, ["uninstall", "--project"], { cwd: dir, home });
+    expect(readFileSync(localAt(dir), "utf-8")).not.toContain("hook --agent");
+    expect(readFileSync(settingsAt(home), "utf-8")).toContain("hook --agent");
+  });
+
+  it("uninstall --all은 다른 폴더에 켜 둔 hook까지 끈다", async () => {
+    await student();
+    const home = join(dir, "home");
+    const other = join(dir, "other");
+    mkdirSync(other);
+    await hooksCommand({ log }, ["install", "-y"], { cwd: other, home, command: CMD });
+    await hooksCommand({ log }, ["install", "--global", "-y"], { cwd: dir, home, command: CMD });
+
+    logs.length = 0;
+    await hooksCommand({ log }, ["status"], { cwd: dir, home });
+    expect(logs.join("\n")).toContain(other);
+
+    await hooksCommand({ log }, ["uninstall", "--all"], { cwd: dir, home });
+    expect(readFileSync(localAt(other), "utf-8")).not.toContain("hook --agent");
+    expect(readFileSync(settingsAt(home), "utf-8")).not.toContain("hook --agent");
+    expect(JSON.parse(readFileSync(join(home, ".chwijung", "chat-scope.json"), "utf-8")).projects).toHaveLength(0);
+  });
+
   it("기본은 현재 폴더, --global은 홈에 설치하고 status·uninstall이 둘 다 본다", async () => {
     await student();
     const home = join(dir, "home");
     await hooksCommand({ log }, ["install", "-y"], { cwd: dir, home, command: CMD });
-    expect(existsSync(settingsAt(dir))).toBe(true);
+    expect(existsSync(localAt(dir))).toBe(true);
     expect(existsSync(settingsAt(home))).toBe(false);
 
     await hooksCommand({ log }, ["install", "--global", "-y"], { cwd: dir, home, command: CMD });

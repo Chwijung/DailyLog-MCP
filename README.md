@@ -217,9 +217,22 @@ npx chwijung-mcp uninstall -y   # 확인 없이 바로 삭제 (--yes)
 ```bash
 chwijung-mcp hooks install            # 지금 폴더에서 연 Claude Code 대화만
 chwijung-mcp hooks install --global   # 이 PC의 모든 Claude Code 대화
-chwijung-mcp hooks status             # 켜진 곳, 아직 못 보낸 기록 수
+chwijung-mcp hooks exclude            # 지금 폴더(와 하위 폴더)는 수집하지 않기
+chwijung-mcp hooks include            # exclude 되돌리기
+chwijung-mcp hooks status             # 켜진 곳, 제외한 폴더, 아직 못 보낸 기록 수
 chwijung-mcp hooks uninstall          # 끄기 (지금 폴더 + 전역)
+chwijung-mcp hooks uninstall --project  # 지금 폴더만 끄기
+chwijung-mcp hooks uninstall --global   # 전역만 끄기
+chwijung-mcp hooks uninstall --all      # 켜 둔 모든 폴더 + 전역 끄기
 ```
+
+**범위 고르기**
+
+- 프로젝트 몇 개만 남기고 싶으면 그 폴더마다 들어가서 `hooks install` 하세요.
+- `--global`로 켰는데 일부 폴더는 빼고 싶으면 그 폴더에서 `hooks exclude` 하세요. 하위 폴더도 함께 빠지고, 폴더 단위로 켠 hook보다 우선해요.
+- 폴더 단위 hook은 그 폴더의 개인 설정 파일 `.claude/settings.local.json`에 들어가요. git 저장소면 `.git/info/exclude`에 넣어 커밋되지 않게 해요(이 PC에만 적용). 팀원이 clone해도 hook이 따라가지 않아요.
+- 폴더 단위 hook은 Claude Code를 **그 폴더에서 시작했을 때** 동작해요. macOS·Linux에서 그 폴더가 git 저장소 맨 위 폴더면 하위 폴더에서 시작해도 동작해요(Claude Code가 저장소 맨 위의 개인 설정 파일을 읽기 때문).
+- 0.3.x까지는 폴더 단위 hook을 `.claude/settings.json`(팀이 커밋하는 파일)에 넣었어요. `hooks status`가 "예전 위치"를 알려 주면 `hooks install`을 다시 실행해 옮기세요. 그 파일을 커밋했었다면 바뀐 내용도 커밋하세요.
 
 | 보내는 것 | 보내지 않는 것 |
 |---|---|
@@ -231,7 +244,7 @@ chwijung-mcp hooks uninstall          # 끄기 (지금 폴더 + 전역)
 - 기록은 `~/.chwijung/chat-spool/<계정>/`에 잠깐 쌓였다가 AI 응답이 끝날 때(Stop) 한 번에 보내요. 오프라인이면 남겨 두고 다음에 다시 보내요(계정마다 최대 2,000건, 본인만 읽을 수 있는 권한).
 - 학생 계정으로 로그인해 있을 때만 쌓아요. 한 PC에서 다른 계정으로 바꿔도, 이전 계정의 기록은 그 계정으로 다시 로그인할 때까지 보내지 않아요.
 - hook은 실패해도 작업을 막지 않아요. 켠 뒤에는 Claude Code를 다시 시작하세요.
-- `chwijung-mcp uninstall`도 이 hook을 함께 지워요.
+- `chwijung-mcp uninstall`도 이 hook을 함께 지워요 (켜 두었던 모든 폴더 포함).
 - Codex는 hook 명령(`chwijung-mcp hook --agent codex`)은 지원하지만 자동 설치는 아직 없어요.
 
 ---
