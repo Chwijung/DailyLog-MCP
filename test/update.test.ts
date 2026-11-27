@@ -1,5 +1,5 @@
 import { execSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, rmSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -162,9 +162,59 @@ describe("checkAndUpdate", () => {
     await checkAndUpdate(dir);
     expect(commands()).toEqual(UPDATE);
 
+    // 재시도 간격에 걸려 통과하지 않도록 시도 기록을 지운다. 반복을 막는 것은 .release 기록뿐이어야 한다.
+    rmSync(join(dir, "build", ".update-attempt"));
     vi.mocked(execSync).mockClear();
     await checkAndUpdate(dir);
     expect(commands()).toEqual([]);
+  });
+
+  it("다른 프로세스가 업데이트 중(잠금 있음)이면 아무것도 하지 않음", async () => {
+    setup("0.3.3", "0.3.3", "0.3.0");
+    writeFileSync(join(dir, "build", ".update-lock"), "");
+    await checkAndUpdate(dir);
+    expect(commands()).toEqual([]);
+    expect(existsSync(join(dir, "build", ".update-lock"))).toBe(true);
+  });
+
+  it("오래된 잠금은 중단된 업데이트가 남긴 것으로 보고 무시함", async () => {
+    setup("0.3.3", "0.3.3", "0.3.0");
+    const lock = join(dir, "build", ".update-lock");
+    writeFileSync(lock, "");
+    const old = new Date(Date.now() - 16 * 60 * 1000);
+    utimesSync(lock, old, old);
+    await checkAndUpdate(dir);
+    expect(commands()).toEqual(UPDATE);
+    expect(existsSync(lock)).toBe(false);
+  });
+
+  it("업데이트하는 동안 잠금을 잡고, 끝나면 풂", async () => {
+    setup("0.3.3", "0.3.3", "0.3.0");
+    const lock = join(dir, "build", ".update-lock");
+    const held: boolean[] = [];
+    vi.mocked(execSync).mockImplementation(((cmd: string) => {
+      held.push(existsSync(lock));
+      return Buffer.from("");
+    }) as never);
+    await checkAndUpdate(dir);
+    expect(held).toEqual(UPDATE.map(() => true));
+    expect(existsSync(lock)).toBe(false);
+  });
+
+  it("업데이트가 실패해도 잠금을 풂", async () => {
+    setup("0.3.3", "0.3.3", "0.3.0");
+    vi.mocked(execSync).mockImplementation(((cmd: string) => {
+      if (cmd === "npm run build") throw new Error("build");
+      return Buffer.from("");
+    }) as never);
+    await checkAndUpdate(dir);
+    expect(existsSync(join(dir, "build", ".update-lock"))).toBe(false);
+  });
+
+  it("최신이면 잠금 파일을 남기지 않음", async () => {
+    setup("0.3.3", "0.3.3", "0.3.3");
+    await checkAndUpdate(dir);
+    expect(existsSync(join(dir, "build", ".update-lock"))).toBe(false);
   });
 
   it("소스가 릴리스보다 앞서 있으면 빌드를 건너뜀", async () => {

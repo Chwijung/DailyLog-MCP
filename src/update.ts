@@ -11,7 +11,7 @@
  */
 
 import { execSync } from "node:child_process";
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { closeSync, existsSync, openSync, readFileSync, statSync, unlinkSync, writeFileSync } from "node:fs";
 import { constants } from "node:os";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -97,6 +97,45 @@ function attemptedRecently(root: string, version: string): boolean {
   return elapsed >= 0 && elapsed < RETRY_INTERVAL_MS;
 }
 
+/**
+ * 이 시간보다 오래된 잠금은 중단된 업데이트가 남긴 것으로 본다.
+ * 업데이트 명령 타임아웃의 합(약 8분)보다 길게 잡는다.
+ */
+const LOCK_STALE_MS = 15 * 60 * 1000;
+
+/**
+ * 같은 저장소를 여러 프로세스(MCP 세션·CLI)가 동시에 업데이트하지 못하게 build/.update-lock 을
+ * 배타적으로 만든다. 잠금을 잡으면 해제 함수를, 다른 프로세스가 잡고 있으면 null 을 돌려준다.
+ * build/ 가 없는 등 잠금 파일을 만들 수 없으면 잠금 없이 진행한다(기존 동작 유지).
+ */
+function acquireLock(root: string): (() => void) | null {
+  const path = resolve(root, "build", ".update-lock");
+  const release = (): void => {
+    try {
+      unlinkSync(path);
+    } catch {
+      // 이미 지워졌으면 그만이다.
+    }
+  };
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      closeSync(openSync(path, "wx"));
+      return release;
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code !== "EEXIST") return () => {};
+      let age: number;
+      try {
+        age = Date.now() - statSync(path).mtimeMs;
+      } catch {
+        continue; // 그 사이 풀렸으면 다시 시도한다.
+      }
+      if (age < LOCK_STALE_MS) return null;
+      release();
+    }
+  }
+  return null;
+}
+
 /** 비대화형(GIT_TERMINAL_PROMPT=0)·ff-only·타임아웃으로 프롬프트나 네트워크 정지에 의한 무기한 블록을 막는다. */
 function runGitPull(root: string): void {
   execSync("git pull --ff-only", {
@@ -180,9 +219,24 @@ export async function checkAndUpdate(root: string = repoRoot()): Promise<void> {
 
   const release = await fetchLatest();
   if (!release) return;
+
+  // 확인부터 설치까지 잠금 안에서 해야, 다른 프로세스가 방금 끝낸 업데이트를 다시 하지 않는다.
+  const unlock = acquireLock(root);
+  if (!unlock) return;
+  let updated: boolean;
+  try {
+    updated = runUpdate(root, release);
+  } finally {
+    unlock();
+  }
+  if (updated) await reexec();
+}
+
+/** 필요하면 소스를 받아 설치·빌드한다. 새 빌드로 재실행해야 하면 true. */
+function runUpdate(root: string, release: Release): boolean {
   const latest = release.version;
   const build = readRecord<BuildRecord>(root, ".version");
-  if (isUpToDate(root, release, build) || attemptedRecently(root, latest)) return;
+  if (isUpToDate(root, release, build) || attemptedRecently(root, latest)) return false;
 
   process.stderr.write(
     `\n[chwijung-mcp] 새 버전 v${latest} 발견 (현재 v${build?.version ?? "?"}). 자동 업데이트 중...\n`,
@@ -201,7 +255,7 @@ export async function checkAndUpdate(root: string = repoRoot()): Promise<void> {
           `자동 업데이트를 건너뜁니다.\n` +
           `  릴리스 브랜치에서 실행하거나 수동으로 업데이트하세요.\n\n`,
       );
-      return;
+      return false;
     }
 
     writeRecord(root, ".update-attempt", { version: latest, at: Date.now() });
@@ -230,12 +284,18 @@ export async function checkAndUpdate(root: string = repoRoot()): Promise<void> {
         `    cd ${root}\n` +
         `    git pull && npm install && npm run build && npm install -g .\n\n`,
     );
-    return; // 실패 시 현재 버전으로 그냥 계속 실행
+    return false; // 실패 시 현재 버전으로 그냥 계속 실행
   }
+  return true;
+}
 
-  // 업데이트된 바이너리로 같은 명령을 re-exec.
-  // stdio: "inherit" 로 stdin/stdout/stderr 를 그대로 물려받기 때문에
-  // MCP 호스트 입장에서는 끊김 없이 새 버전이 시작된다.
+/**
+ * 업데이트된 바이너리로 같은 명령을 re-exec.
+ * stdio: "inherit" 로 stdin/stdout/stderr 를 그대로 물려받기 때문에
+ * MCP 호스트 입장에서는 끊김 없이 새 버전이 시작된다.
+ * 재실행된 프로세스는 오래 살아 있으므로, 잠금을 푼 뒤에 호출한다.
+ */
+async function reexec(): Promise<void> {
   const { execFileSync } = await import("node:child_process");
   try {
     execFileSync(process.argv[0], process.argv.slice(1), {
