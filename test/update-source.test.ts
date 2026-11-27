@@ -136,6 +136,17 @@ describe("autoUpdateBlockedReason", () => {
     expect(autoUpdateBlockedReason(dir)).not.toBeNull();
   });
 
+  it("main에서도 커밋하지 않은 수정이나 올리지 않은 커밋이 있으면 건드리지 않음", () => {
+    const dir = clone("-b", "main");
+    writeFileSync(join(dir, "package-lock.json"), "local"); // 이건 허용
+    expect(autoUpdateBlockedReason(dir)).toBeNull();
+    git(dir, "checkout", "-q", "package-lock.json");
+    writeFileSync(join(dir, "release.txt"), "edit");
+    expect(autoUpdateBlockedReason(dir)).not.toBeNull();
+    git(dir, "commit", "-q", "-am", "local");
+    expect(autoUpdateBlockedReason(dir)).not.toBeNull();
+  });
+
   it("git config chwijung.autoUpdate=false면 건드리지 않음", () => {
     const dir = clone();
     git(dir, "config", "chwijung.autoUpdate", "false");

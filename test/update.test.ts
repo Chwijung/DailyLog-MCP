@@ -258,6 +258,11 @@ describe("checkAndUpdate", () => {
     });
     await checkAndUpdate(dir);
     expect(commands()).toEqual([]);
+
+    // 실패도 시도로 기록해, MCP를 켤 때마다 다시 받지 않는다 (한 시간 간격)
+    vi.mocked(syncSource).mockClear();
+    await checkAndUpdate(dir);
+    expect(vi.mocked(syncSource)).not.toHaveBeenCalled();
   });
 
   it("릴리스 조회 실패 시 업데이트하지 않음", async () => {

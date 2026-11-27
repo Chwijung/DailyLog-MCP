@@ -232,7 +232,7 @@ chwijung-mcp hooks uninstall --all      # 켜 둔 모든 폴더 + 전역 끄기
 - `--global`로 켰는데 일부 폴더는 빼고 싶으면 그 폴더에서 `hooks exclude` 하세요. 하위 폴더도 함께 빠지고, 폴더 단위로 켠 hook보다 우선해요.
 - 폴더 단위 hook은 그 폴더의 개인 설정 파일 `.claude/settings.local.json`에 들어가요. git 저장소면 `.git/info/exclude`에 넣어 커밋되지 않게 해요(이 PC에만 적용). 팀원이 clone해도 hook이 따라가지 않아요.
 - 폴더 단위 hook은 Claude Code를 **그 폴더에서 시작했을 때** 동작해요. macOS·Linux에서 그 폴더가 git 저장소 맨 위 폴더면 하위 폴더에서 시작해도 동작해요(Claude Code가 저장소 맨 위의 개인 설정 파일을 읽기 때문).
-- 0.3.x까지는 폴더 단위 hook을 `.claude/settings.json`(팀이 커밋하는 파일)에 넣었어요. `hooks status`가 "예전 위치"를 알려 주면 `hooks install`을 다시 실행해 옮기세요. 그 파일을 커밋했었다면 바뀐 내용도 커밋하세요.
+- v0.3.2까지는 폴더 단위 hook을 `.claude/settings.json`(팀이 커밋하는 파일)에 넣었어요. `hooks status`가 "예전 위치"를 알려 주면 `hooks install`을 다시 실행해 옮기세요. 그 파일을 커밋했었다면 바뀐 내용도 커밋하세요.
 
 | 보내는 것 | 보내지 않는 것 |
 |---|---|

@@ -1,8 +1,9 @@
 /**
  * 자동 업데이트가 소스를 받는 방법.
  *
- * 수강생에게는 main(릴리스)만 반영한다. 기본 브랜치가 dev 라서 브랜치 지정 없이 클론한
- * 설치본은 dev 에 있으므로, 업데이트할 때 main 으로 옮긴다. 개발용 폴더는 건드리지 않는다.
+ * 수강생에게는 main(릴리스)만 반영한다. 기본 브랜치가 dev 이던 때(~2026-11) 브랜치 지정 없이
+ * 클론한 설치본은 dev 에 있으므로, 업데이트할 때 main 으로 옮긴다. 지금 기본 브랜치는 main 이다.
+ * 개발용 폴더(작업 브랜치, 수정·올리지 않은 커밋이 있는 dev·main)는 건드리지 않는다.
  * stdout 은 MCP 프로토콜 전용이므로 stderr 만 사용한다.
  */
 
@@ -45,20 +46,21 @@ function changedFiles(root: string): string[] {
 
 /**
  * 자동 업데이트를 하면 안 되는 저장소면 이유를, 해도 되면 null 을 돌려준다.
- * 작업 브랜치이거나, dev 에서 개발 중인 흔적(수정·올리지 않은 커밋)이 있거나, 직접 끈 경우다.
+ * 작업 브랜치이거나, dev·main 에서 개발 중인 흔적(수정·올리지 않은 커밋)이 있거나, 직접 끈 경우다.
  */
 export function autoUpdateBlockedReason(root: string): string | null {
   if (tryGit(root, "config --get chwijung.autoUpdate") === "false") {
     return "git config chwijung.autoUpdate 가 false";
   }
   const branch = git(root, "rev-parse --abbrev-ref HEAD");
-  if (branch === RELEASE_BRANCH) return null;
-  if (branch !== DEV_BRANCH) return `작업 브랜치(${branch})`;
+  if (branch !== RELEASE_BRANCH && branch !== DEV_BRANCH) return `작업 브랜치(${branch})`;
   if (changedFiles(root).some((file) => file !== LOCK_FILE)) {
-    return "dev 에 커밋하지 않은 수정이 있음";
+    return `${branch} 에 커밋하지 않은 수정이 있음`;
   }
-  if (tryGit(root, 'rev-list --count "@{upstream}..HEAD"') !== "0") {
-    return "dev 에 올리지 않은 커밋이 있음";
+  const ahead = tryGit(root, 'rev-list --count "@{upstream}..HEAD"');
+  // dev 는 업스트림이 없어도 개발용으로 본다. main 은 업스트림이 없으면(직접 만든 main 등) 비교하지 않는다.
+  if (ahead === null ? branch === DEV_BRANCH : ahead !== "0") {
+    return `${branch} 에 올리지 않은 커밋이 있음`;
   }
   return null;
 }
